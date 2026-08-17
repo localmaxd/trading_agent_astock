@@ -1,0 +1,5 @@
+**Recommendation**: Overweight
+
+**Rationale**: Tongfu Microelectronics (002156.SZ) is currently mispriced by the market, which conflates heavy AI-capex burn with structural value destruction. While the Bear correctly identifies high capital intensity (CAPEX/EBITDA >130%) and leverage risks, the Bull's core thesis on earnings quality (OCF/Net Income = 4.03x) provides a critical liquidity buffer that invalidates the immediate dilution risk. The stock is consolidating near fair value, but the asymmetric upside from advanced packaging (HBM/Chiplet) adoption offers a 5-10% re-rating potential. The market is pricing in a linear cycle, ignoring the convex payoff once utilization exceeds 85%.
+
+**Strategic Actions**: Execute an immediate position increase of 5 percentage points in the next trading session. Target a total allocation of roughly 10-12% of the portfolio, utilizing the MA20 support (61.34 CNY) as a stop-loss trigger for any new entries.

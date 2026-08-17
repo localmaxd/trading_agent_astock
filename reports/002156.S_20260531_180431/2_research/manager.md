@@ -1,0 +1,5 @@
+**Recommendation**: Hold
+
+**Rationale**: The market is pricing in a binary outcome: AI-driven packaging success or leverage-fueled collapse. The Bull's CAPEX efficiency multiplier (1.14x) is compelling but structurally fragile, relying on short-term financing to fund long-term capex without a stress test for deleveraging. The Bear's interest drag calculation (3.01B annual burden) is mathematically sound but ignores the operational cash conversion buffer (OCF/NI 4.03x) that can absorb rate shocks. The current price of 75 RMB reflects a fair value consensus, with the upside from Penang validation offset by the downside risk of margin financing cascade. My confidence is capped at 4/10 due to the data gap on liquidity thresholds, preventing a directional bet.
+
+**Strategic Actions**: Maintain position at 10% allocation. Do not add on dips below 66 RMB or trim on rallies above 80 RMB until the financing balance stabilizes and MFI crosses 50.
