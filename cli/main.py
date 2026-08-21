@@ -18,6 +18,8 @@ from rich.layout import Layout
 from rich.text import Text
 from rich.table import Table
 from collections import deque
+import queue
+import threading
 import time
 from rich.tree import Tree
 from rich import box
@@ -358,6 +360,31 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
     # Combine tool calls and messages
     all_messages = []
 
+    # Live activity (tools / LLM calls in flight or just finished) — shown on
+    # top of the panel so the pipeline's step-by-step progress is visible
+    # while agents are still working.
+    if stats_handler:
+        activity = stats_handler.get_activity()
+        now_ts = time.strftime("%H:%M:%S", time.localtime(time.time()))
+        for entry in activity["tools"]:
+            ts = time.strftime("%H:%M:%S", time.localtime(entry["ts"]))
+            name = entry["name"]
+            if entry["status"] == "running":
+                content = f"[yellow]⚙ {name}({entry['args']}) 执行中...[/yellow]"
+            elif entry["status"] == "error":
+                content = f"[red]✗ {name} 失败: {entry['detail']}[/red]"
+            else:
+                content = f"[green]✓ {name} 完成 {entry['detail']}[/green]"
+            all_messages.append((ts, "Tool", content))
+        for entry in activity["llms"]:
+            ts = time.strftime("%H:%M:%S", time.localtime(entry["ts"]))
+            name = entry["name"]
+            if entry["status"] == "running":
+                content = f"[cyan]◌ LLM {name} 调用中...[/cyan]"
+            else:
+                content = f"[cyan]✓ LLM {name} 完成 {entry['detail']}[/cyan]"
+            all_messages.append((ts, "LLM", content))
+
     # Add tool calls
     for timestamp, tool_name, args in message_buffer.tool_calls:
         formatted_args = format_tool_args(args)
@@ -536,7 +563,7 @@ def get_user_selections():
     # Analysts team is fixed — 5 agents: 基本面/技术面/博弈面/风险面/新闻舆情
     selected_analysts = DEFAULT_ANALYSTS
 
-    # LLM: DeepSeek API
+    # LLM: DeepSeek API (2026-08: 切回官方 API；本地 8091 后端已停用)
     console.print(
         "[dim]Using DeepSeek (deepseek-v4-flash @ api.deepseek.com)[/dim]"
     )
@@ -546,14 +573,15 @@ def get_user_selections():
         "analysis_date": analysis_date,
         "analysts": selected_analysts,
         "research_depth": selected_research_depth,
-        # "llm_provider": "deepseek",
-        # "backend_url": None,
-        # "shallow_thinker": "deepseek-v4-flash",
-        # "deep_thinker": "deepseek-v4-flash",
-         "llm_provider": "local",                                                                      
-     "backend_url": "http://127.0.0.1:8091/v1",                                                    
-      "shallow_thinker": "Qwen3.6-35B-A3B-8bit",                                       
-     "deep_thinker": "Qwen3.6-35B-A3B-8bit",       
+        "llm_provider": "deepseek",
+        "backend_url": None,  # None -> https://api.deepseek.com (官方默认)
+        "shallow_thinker": "deepseek-v4-flash",
+        "deep_thinker": "deepseek-v4-flash",
+        # 本地后端配置（已停用：127.0.0.1:8091 无服务）：
+        # "llm_provider": "local",
+        # "backend_url": "http://127.0.0.1:8091/v1",
+        # "shallow_thinker": "Qwen3.6-35B-A3B-8bit",
+        # "deep_thinker": "Qwen3.6-35B-A3B-8bit",
         "google_thinking_level": None,
         "openai_reasoning_effort": None,
         "anthropic_effort": None,
@@ -868,6 +896,106 @@ def format_tool_args(args, max_length=80) -> str:
         return result[:max_length - 3] + "..."
     return result
 
+def process_chunk(message_buffer, chunk):
+    """Process one streamed state chunk: messages, tool calls, agent statuses
+    and report sections. Runs on the UI thread so message_buffer stays
+    single-threaded while the graph streams in a background thread."""
+    # Process all messages in chunk, deduplicating by message ID
+    for message in chunk.get("messages", []):
+        msg_id = getattr(message, "id", None)
+        if msg_id is not None:
+            if msg_id in message_buffer._processed_message_ids:
+                continue
+            message_buffer._processed_message_ids.add(msg_id)
+
+        msg_type, content = classify_message_type(message)
+        if content and content.strip():
+            message_buffer.add_message(msg_type, content)
+
+        if hasattr(message, "tool_calls") and message.tool_calls:
+            for tool_call in message.tool_calls:
+                if isinstance(tool_call, dict):
+                    message_buffer.add_tool_call(tool_call["name"], tool_call["args"])
+                else:
+                    message_buffer.add_tool_call(tool_call.name, tool_call.args)
+
+    # Update analyst statuses based on report state (runs on every chunk)
+    update_analyst_statuses(message_buffer, chunk)
+
+    # Research Team - Handle Investment Debate State
+    if chunk.get("investment_debate_state"):
+        debate_state = chunk["investment_debate_state"]
+        bull_hist = debate_state.get("bull_history", "").strip()
+        bear_hist = debate_state.get("bear_history", "").strip()
+        judge = debate_state.get("judge_decision", "").strip()
+
+        # Only update status when there's actual content
+        if bull_hist or bear_hist:
+            for agent in ("Bull Researcher", "Bear Researcher", "Research Manager"):
+                message_buffer.update_agent_status(agent, "in_progress")
+        if bull_hist:
+            message_buffer.update_report_section(
+                "investment_plan", f"### Bull Researcher Analysis\n{bull_hist}"
+            )
+        if bear_hist:
+            message_buffer.update_report_section(
+                "investment_plan", f"### Bear Researcher Analysis\n{bear_hist}"
+            )
+        if judge:
+            message_buffer.update_report_section(
+                "investment_plan", f"### Research Manager Decision\n{judge}"
+            )
+            for agent in ("Bull Researcher", "Bear Researcher", "Research Manager"):
+                message_buffer.update_agent_status(agent, "completed")
+            message_buffer.update_agent_status("Trader", "in_progress")
+
+    # Trading Team
+    if chunk.get("trader_investment_plan"):
+        message_buffer.update_report_section(
+            "trader_investment_plan", chunk["trader_investment_plan"]
+        )
+        if message_buffer.agent_status.get("Trader") != "completed":
+            message_buffer.update_agent_status("Trader", "completed")
+            message_buffer.update_agent_status("Aggressive Analyst", "in_progress")
+
+    # Risk Management Team - Handle Risk Debate State
+    if chunk.get("risk_debate_state"):
+        risk_state = chunk["risk_debate_state"]
+        agg_hist = risk_state.get("aggressive_history", "").strip()
+        con_hist = risk_state.get("conservative_history", "").strip()
+        neu_hist = risk_state.get("neutral_history", "").strip()
+        judge = risk_state.get("judge_decision", "").strip()
+
+        if agg_hist:
+            if message_buffer.agent_status.get("Aggressive Analyst") != "completed":
+                message_buffer.update_agent_status("Aggressive Analyst", "in_progress")
+            message_buffer.update_report_section(
+                "final_trade_decision", f"### Aggressive Analyst Analysis\n{agg_hist}"
+            )
+        if con_hist:
+            if message_buffer.agent_status.get("Conservative Analyst") != "completed":
+                message_buffer.update_agent_status("Conservative Analyst", "in_progress")
+            message_buffer.update_report_section(
+                "final_trade_decision", f"### Conservative Analyst Analysis\n{con_hist}"
+            )
+        if neu_hist:
+            if message_buffer.agent_status.get("Neutral Analyst") != "completed":
+                message_buffer.update_agent_status("Neutral Analyst", "in_progress")
+            message_buffer.update_report_section(
+                "final_trade_decision", f"### Neutral Analyst Analysis\n{neu_hist}"
+            )
+        if judge:
+            if message_buffer.agent_status.get("Portfolio Manager") != "completed":
+                message_buffer.update_agent_status("Portfolio Manager", "in_progress")
+                message_buffer.update_report_section(
+                    "final_trade_decision", f"### Portfolio Manager Decision\n{judge}"
+                )
+                message_buffer.update_agent_status("Aggressive Analyst", "completed")
+                message_buffer.update_agent_status("Conservative Analyst", "completed")
+                message_buffer.update_agent_status("Neutral Analyst", "completed")
+                message_buffer.update_agent_status("Portfolio Manager", "completed")
+
+
 def run_analysis(checkpoint: bool = False):
     # First get all user selections
     selections = get_user_selections()
@@ -993,106 +1121,51 @@ def run_analysis(checkpoint: bool = False):
         # (LLM tracking is handled separately via LLM constructor)
         args = graph.propagator.get_graph_args(callbacks=[stats_handler])
 
-        # Stream the analysis
+        # Stream the analysis in a background thread so the UI keeps
+        # refreshing (agent status, messages, LLM/tool counters and token
+        # usage) while LLM calls are still in flight. Chunks are handed to
+        # the UI thread through a queue; process_chunk runs on the UI thread
+        # so message_buffer stays single-threaded.
+        chunk_queue: "queue.Queue" = queue.Queue()
+        stream_errors: list = []
+
+        def _stream_worker():
+            try:
+                for chunk in graph.graph.stream(init_agent_state, **args):
+                    chunk_queue.put(chunk)
+            except Exception as exc:  # propagate to the UI thread
+                stream_errors.append(exc)
+            finally:
+                chunk_queue.put(None)
+
+        stream_thread = threading.Thread(target=_stream_worker, daemon=True)
+        stream_thread.start()
+
         trace = []
-        for chunk in graph.graph.stream(init_agent_state, **args):
-            # Process all messages in chunk, deduplicating by message ID
-            for message in chunk.get("messages", []):
-                msg_id = getattr(message, "id", None)
-                if msg_id is not None:
-                    if msg_id in message_buffer._processed_message_ids:
-                        continue
-                    message_buffer._processed_message_ids.add(msg_id)
+        done = False
+        while not done:
+            # Drain every chunk that arrived since the last refresh
+            while True:
+                try:
+                    chunk = chunk_queue.get_nowait()
+                except queue.Empty:
+                    break
+                if chunk is None:
+                    done = True
+                    break
+                process_chunk(message_buffer, chunk)
+                trace.append(chunk)
 
-                msg_type, content = classify_message_type(message)
-                if content and content.strip():
-                    message_buffer.add_message(msg_type, content)
+            # Errors from the streaming thread surface here, preserving the
+            # original exception behaviour (traceback printed by the CLI).
+            if stream_errors:
+                raise stream_errors[0]
 
-                if hasattr(message, "tool_calls") and message.tool_calls:
-                    for tool_call in message.tool_calls:
-                        if isinstance(tool_call, dict):
-                            message_buffer.add_tool_call(tool_call["name"], tool_call["args"])
-                        else:
-                            message_buffer.add_tool_call(tool_call.name, tool_call.args)
-
-            # Update analyst statuses based on report state (runs on every chunk)
-            update_analyst_statuses(message_buffer, chunk)
-
-            # Research Team - Handle Investment Debate State
-            if chunk.get("investment_debate_state"):
-                debate_state = chunk["investment_debate_state"]
-                bull_hist = debate_state.get("bull_history", "").strip()
-                bear_hist = debate_state.get("bear_history", "").strip()
-                judge = debate_state.get("judge_decision", "").strip()
-
-                # Only update status when there's actual content
-                if bull_hist or bear_hist:
-                    update_research_team_status("in_progress")
-                if bull_hist:
-                    message_buffer.update_report_section(
-                        "investment_plan", f"### Bull Researcher Analysis\n{bull_hist}"
-                    )
-                if bear_hist:
-                    message_buffer.update_report_section(
-                        "investment_plan", f"### Bear Researcher Analysis\n{bear_hist}"
-                    )
-                if judge:
-                    message_buffer.update_report_section(
-                        "investment_plan", f"### Research Manager Decision\n{judge}"
-                    )
-                    update_research_team_status("completed")
-                    message_buffer.update_agent_status("Trader", "in_progress")
-
-            # Trading Team
-            if chunk.get("trader_investment_plan"):
-                message_buffer.update_report_section(
-                    "trader_investment_plan", chunk["trader_investment_plan"]
-                )
-                if message_buffer.agent_status.get("Trader") != "completed":
-                    message_buffer.update_agent_status("Trader", "completed")
-                    message_buffer.update_agent_status("Aggressive Analyst", "in_progress")
-
-            # Risk Management Team - Handle Risk Debate State
-            if chunk.get("risk_debate_state"):
-                risk_state = chunk["risk_debate_state"]
-                agg_hist = risk_state.get("aggressive_history", "").strip()
-                con_hist = risk_state.get("conservative_history", "").strip()
-                neu_hist = risk_state.get("neutral_history", "").strip()
-                judge = risk_state.get("judge_decision", "").strip()
-
-                if agg_hist:
-                    if message_buffer.agent_status.get("Aggressive Analyst") != "completed":
-                        message_buffer.update_agent_status("Aggressive Analyst", "in_progress")
-                    message_buffer.update_report_section(
-                        "final_trade_decision", f"### Aggressive Analyst Analysis\n{agg_hist}"
-                    )
-                if con_hist:
-                    if message_buffer.agent_status.get("Conservative Analyst") != "completed":
-                        message_buffer.update_agent_status("Conservative Analyst", "in_progress")
-                    message_buffer.update_report_section(
-                        "final_trade_decision", f"### Conservative Analyst Analysis\n{con_hist}"
-                    )
-                if neu_hist:
-                    if message_buffer.agent_status.get("Neutral Analyst") != "completed":
-                        message_buffer.update_agent_status("Neutral Analyst", "in_progress")
-                    message_buffer.update_report_section(
-                        "final_trade_decision", f"### Neutral Analyst Analysis\n{neu_hist}"
-                    )
-                if judge:
-                    if message_buffer.agent_status.get("Portfolio Manager") != "completed":
-                        message_buffer.update_agent_status("Portfolio Manager", "in_progress")
-                        message_buffer.update_report_section(
-                            "final_trade_decision", f"### Portfolio Manager Decision\n{judge}"
-                        )
-                        message_buffer.update_agent_status("Aggressive Analyst", "completed")
-                        message_buffer.update_agent_status("Conservative Analyst", "completed")
-                        message_buffer.update_agent_status("Neutral Analyst", "completed")
-                        message_buffer.update_agent_status("Portfolio Manager", "completed")
-
-            # Update the display
+            # Keep the display live while LLM calls are in flight
             update_display(layout, stats_handler=stats_handler, start_time=start_time)
-
-            trace.append(chunk)
+            if not done:
+                live.refresh()
+                time.sleep(0.25)
 
         # Get final state and decision
         final_state = trace[-1]

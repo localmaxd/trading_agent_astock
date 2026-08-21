@@ -9,6 +9,25 @@
 
 TradingAgents 是一个模仿真实交易公司运作的多智能体金融交易框架。它部署了多个由大语言模型（LLM）驱动的专业智能体，从基本面分析师、情绪专家、技术分析师到交易员、风险管理团队，协同评估市场状况并做出交易决策。
 
+### 1.1 交互入口（2026-08 新增网页版）
+
+- **CLI**：`tradingagents analyze`（Typer 交互式终端界面，实时刷新 agent 状态 / 工具活动 / token 统计）
+- **网页版**：`api_server.py`（FastAPI）提供 Web UI + SSE 实时流，**注重事实可观测性**：
+  - 输入**标的 + 日期**一键开启会话（分析师/深度可配）
+  - 实时展示：Agent 进度、**工具执行过程**（开始/完成/耗时/数据量）、**LLM 调用与 token 消耗**
+  - **节点级 LLM 可观测性**（调试用）：每个 LLM 调用归属到**图节点**（`langgraph_node`，如 `Analyst Team` / `Trader`），展示**输入/输出摘要**（点击展开）、tokens（↑↓）与耗时；**节点统计**面板聚合每节点的 LLM 次数 / Tokens / 耗时；进度面板实时显示"当前执行到图的哪个节点"
+  - **事实校验面板**：每个分析师的逐条结论校验（Claim / 类型 fact|calculation / 报告值 vs 期望值 / 通过 / 差异原因 / 重试轮次 / 反馈）、结构化来源声明（claim ← source_tool）
+  - 标的代码归一化事件（TickerGuard）、最终决策与完整报告
+
+实现说明：SSE 使用 `stream_mode=["updates","messages"]` 双模式——updates 提供节点完成时序（节点耗时），messages 携带 `(message, langgraph_node)` 元数据；LLM 输入/输出/token 由 `SSEStatsHandler` 回调按 run_id（流式 chunk 无 run_id 时按完成顺序 FIFO）配对后与节点名合并为 `llm_call` 事件。
+
+启动方式：
+```bash
+.venv/bin/python -m uvicorn api_server:app --host 0.0.0.0 --port 8007
+# 打开 http://localhost:8007
+```
+可选环境变量：`WEB_LLM_PROVIDER`（默认 deepseek）、`WEB_QUICK_MODEL`/`WEB_DEEP_MODEL`（默认 deepseek-v4-flash）、`WEB_SEARCH_ENABLED`（默认 false）
+
 ### 核心特性
 - **多智能体协作**：分析师团队 → 研究团队 → 交易员 → 风险管理 → 投资组合经理
 - **多 LLM 提供商支持**：OpenAI、Google (Gemini)、Anthropic (Claude)、xAI (Grok)、DeepSeek、Qwen、GLM、OpenRouter、Ollama、Azure
@@ -299,11 +318,33 @@ v0.2.4 起流水线从单一 StateGraph 重构为 **5 个独立编译的阶段�
 - 锚定字段 `input_ticker` 定义在 `AgentState`，由 `Propagator.create_initial_state` 初始化，任何子图都不会写它
 - 覆盖测试：`tests/test_ticker_guard.py`（含"子图篡改标的 → 下一子图前被拦截"的集成测试）
 
+### 4.8 网络搜索与事实确认（0820 feature）
+
+**网络搜索（可选，默认关闭）**——`tradingagents/agents/utils/web_search_tool.py`：
+
+- 包装 DeepSeek Responses API 的**服务端内置 web_search 工具**（`/responses` 端点，`tools=[{"type":"web_search"}]`）
+- 与主 LLM provider 解耦：使用独立 API Key（`web_search_api_key` 或 `DEEPSEEK_API_KEY`），本地 Qwen 主 LLM 也能使用
+- 智能体**自主规划**：fundamentals / technical / game_theory 分析师（`web_search_analysts` 可配）的工具列表中可选 `web_search_tool`，可自主决定是否去东方财富（eastmoney.com）等网站补充信息
+- 配置：`web_search_enabled`（总开关，默认 False）、`web_search_model`（默认 deepseek-chat）
+
+**事实确认节点（默认开启）**——`tradingagents/graph/fact_checker.py`：
+
+- 在 fundamentals / technical / game_theory **输出节点之后**插入 `FactChecker-<分析师>` 节点：
+  1. **代码二次取数**：重新调用该分析师自己的工具（复算/复现）+ 按**数据重叠面**挑选的交叉来源工具（同一事实在多个独立端点出现时方可交叉，如 game_theory ↔ tool_risk 的内部人交易、technical ↔ tool_game_theory 的资金流向、fundamentals ↔ tool_news_sentiment 的公告）
+  2. **多轮联网搜索**（`web_search_enabled` 开启时）：搜索规划 LLM 先分析报告/claims 生成 `VerificationSearchPlan`（0-N 条 query）→ 代码逐条执行 `web_search_tool`（单条失败自动重试一次）→ 基于已有结果进行第 2 轮补充规划（`verify_search_max_queries`=4 条/轮、`verify_search_max_rounds`=2 轮预算）；规划器不可用时回退为分析师主题模板 query；常规取数循环中跳过 web_search_tool，避免模板与规划搜索双重调用
+  2. **结构化校验**：校验 LLM 输出 `FactVerificationReport`（Pydantic Schema），逐项给出 事实比对（fact）或 重新计算（calculation）结果；prompt 内置**逐分析师交叉指引**（哪些字段可跨源比对、哪些必须复算、哪些只能作锚点），防止用不相干数据源臆造比对
+  3. **失败反馈闭环**：校验失败时把失败原因写入 `verification_state`，通过 `RetryClear` 节点把前置分析师**送回去重新组织材料**（feedback 注入其 prompt），最多 `max_verify_rounds`（默认 2）轮；超限后报告标记为未通过并继续，不阻塞流水线
+- 分析师输出升级为 `AnalystFactualReport`（结论 + 来源清单：claim / value / source_tool / source_data），渲染回 Markdown 保持下游兼容；校验结果随状态日志持久化
+- 配置：`verify_enabled`（默认 True）、`max_verify_rounds`（默认 2）
+- 覆盖测试：`tests/test_fact_checker.py`、`tests/test_web_search_tool.py`
+
 **各子图职责**：
 
 | 子图 | 内部节点 | 产出通道 |
 |------|---------|---------|
-| Analyst Team | 各分析师 ↔ 工具循环 + Msg Clear | 4 份报告 |
+| Analyst Team | **4 个分析师并行**（START 扇出）：各自 分析师 ↔ 工具循环 + FactChecker（失败重试） | 4 份报告 |
+
+**分析师并行**（2026-08）：分析师之间无依赖，从 START **并行扇出**，各自独立循环；报告字段（fundamentals_report 等）天然独立无竞争，每个分析师还有**独立的消息通道**（`messages_fundamentals` 等，`ToolNode` 通过 `messages_key` 写入各自通道）避免对话互相污染；由于通道隔离，**正常路径不再需要 Msg Clear 节点**（分析师的对话残留在自己通道中不会泄漏给任何下游），仅校验失败重试路径保留 RetryClear 防止上下文膨胀；`verification_state` 使用按分析师 key 合并的 reducer 支持校验节点并发写；全部完成自动汇聚后进入串行的辩论/交易/风控/组合经理阶段。
 | Research Debate | Bull ↔ Bear 辩论循环 + Research Manager | `investment_plan` |
 | Trader | Trader（position 工具 + 结构化输出） | `trader_investment_plan` |
 | Risk Debate | Aggressive ↔ Conservative ↔ Neutral 辩论循环 | `risk_debate_state` |

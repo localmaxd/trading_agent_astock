@@ -2,6 +2,24 @@
 
 from tradingagents.agents.utils.agent_states import AgentState
 
+# Analyst type -> its parallel message channel (analysts run concurrently in
+# the Analyst Team stage, each with its own conversation).
+_ANALYST_MESSAGE_CHANNELS = {
+    "fundamentals": "messages_fundamentals",
+    "technical": "messages_technical",
+    "game_theory": "messages_game_theory",
+    "news_sentiment": "messages_news_sentiment",
+}
+
+
+def _analyst_messages(state: AgentState, analyst_type: str) -> list:
+    """Messages of one analyst's parallel conversation (fallback: shared)."""
+    channel = _ANALYST_MESSAGE_CHANNELS.get(analyst_type, "messages")
+    messages = state.get(channel)
+    if not messages:
+        messages = state.get("messages", [])
+    return messages
+
 
 class ConditionalLogic:
     """Handles conditional logic for determining graph flow."""
@@ -13,35 +31,35 @@ class ConditionalLogic:
 
     def should_continue_fundamentals(self, state: AgentState):
         """Determine if fundamentals analysis should continue."""
-        messages = state["messages"]
+        messages = _analyst_messages(state, "fundamentals")
         last_message = messages[-1]
         if last_message.tool_calls:
             return "tools_fundamentals"
-        return "Msg Clear Fundamentals"
+        return "done"
 
     def should_continue_technical(self, state: AgentState):
         """Determine if technical analysis should continue."""
-        messages = state["messages"]
+        messages = _analyst_messages(state, "technical")
         last_message = messages[-1]
         if last_message.tool_calls:
             return "tools_technical"
-        return "Msg Clear Technical"
+        return "done"
 
     def should_continue_game_theory(self, state: AgentState):
         """Determine if game theory analysis should continue."""
-        messages = state["messages"]
+        messages = _analyst_messages(state, "game_theory")
         last_message = messages[-1]
         if last_message.tool_calls:
             return "tools_game_theory"
-        return "Msg Clear Game_Theory"
+        return "done"
 
     def should_continue_news_sentiment(self, state: AgentState):
         """Determine if news sentiment analysis should continue."""
-        messages = state["messages"]
+        messages = _analyst_messages(state, "news_sentiment")
         last_message = messages[-1]
         if last_message.tool_calls:
             return "tools_news_sentiment"
-        return "Msg Clear News_Sentiment"
+        return "done"
 
     def should_continue_debate(self, state: AgentState) -> str:
         """Determine if debate should continue."""

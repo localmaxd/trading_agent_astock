@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TradingAgents 网页版 - 多智能体交易分析</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #171d24; --border: #2a3340;
+    --text: #d8dee6; --dim: #8b98a8; --accent: #4da3ff;
+    --green: #4cd97b; --yellow: #e6c34a; --red: #e6605a; --cyan: #4dd0e1;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 13px; }
+  header { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+  header h1 { font-size: 16px; color: var(--accent); margin-right: 8px; }
+  header label { color: var(--dim); font-size: 12px; }
+  header input, header select { background: #0d1117; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 13px; }
+  header button { background: var(--accent); color: #06121f; border: none; border-radius: 6px; padding: 6px 16px; font-weight: 600; cursor: pointer; }
+  header button:disabled { background: #3a4a5c; color: #8b98a8; cursor: not-allowed; }
+  .badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .badge.pending { background: #3a3f47; color: #aab4c0; }
+  .badge.running { background: #2b3a52; color: var(--accent); }
+  .badge.completed { background: #1e3a2b; color: var(--green); }
+  .badge.failed { background: #46282a; color: var(--red); }
+  main { display: grid; grid-template-columns: 250px 1fr 1.2fr; gap: 10px; padding: 10px 14px; height: calc(100vh - 58px); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: auto; display: flex; flex-direction: column; }
+  .panel h2 { font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; padding: 9px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--panel); }
+  .panel .body { padding: 10px 12px; overflow-y: auto; flex: 1; }
+  /* progress */
+  .agent-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 2px; border-bottom: 1px dashed #222b36; }
+  .agent-row .status { font-size: 11px; }
+  .status.pending { color: var(--dim); } .status.in_progress { color: var(--yellow); } .status.completed { color: var(--green); } .status.error { color: var(--red); }
+  .stats { margin-top: 10px; padding: 8px; background: #10161d; border-radius: 8px; font-size: 12px; line-height: 1.7; color: var(--dim); }
+  .stats b { color: var(--text); }
+  /* activity */
+  .act-line { padding: 4px 2px; border-bottom: 1px dashed #202932; font-size: 12px; word-break: break-all; }
+  .act-line .t { color: var(--dim); margin-right: 6px; }
+  .act-line.running { color: var(--yellow); }
+  .act-line.done { color: var(--green); }
+  .act-line.error { color: var(--red); }
+  .act-line.llm { color: var(--cyan); }
+  .act-line.ticker { color: var(--accent); }
+  /* verification */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .tabs button { flex: 1; background: none; border: none; color: var(--dim); padding: 8px; cursor: pointer; font-size: 13px; }
+  .tabs button.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+  .verify-card { margin-bottom: 12px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .verify-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #141b23; font-size: 12px; }
+  .verify-head.pass { background: #17301f; } .verify-head.fail { background: #3a2322; }
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #202932; vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; }
+  .pass-tag { color: var(--green); font-weight: 700; } .fail-tag { color: var(--red); font-weight: 700; }
+  .feedback { padding: 6px 10px; font-size: 11.5px; color: #e8b3a0; background: #2a1d1b; white-space: pre-wrap; }
+  .claims-note { font-size: 11.5px; color: var(--dim); padding: 6px; }
+  /* report */
+  .report-section { margin-bottom: 12px; border-left: 3px solid var(--accent); padding-left: 8px; }
+  .report-section h3 { font-size: 12.5px; color: var(--accent); margin-bottom: 4px; }
+  .report-section pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.55; color: #c9d3de; font-family: inherit; }
+  .decision-box { border: 1px solid var(--green); background: #14271c; border-radius: 8px; padding: 10px; margin-top: 10px; }
+  .decision-box h3 { color: var(--green); margin-bottom: 6px; }
+  .empty { color: var(--dim); text-align: center; padding: 30px 10px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TradingAgents</h1>
+  <label>标的 <input id="ticker" value="600519.SH" style="width:110px"></label>
+  <label>日期 <input id="date" type="date"></label>
+  <label>深度
+    <select id="depth"><option value="1">1 (快速)</option><option value="2">2</option><option value="3">3 (中等)</option></select>
+  </label>
+  <label>分析师
+    <select id="analysts" multiple size="1" style="height:30px">
+      <option value="fundamentals" selected>基本面</option>
+      <option value="technical" selected>技术面</option>
+      <option value="game_theory" selected>博弈面</option>
+      <option value="news_sentiment" selected>新闻舆情</option>
+    </select>
+  </label>
+  <button id="startBtn" onclick="startAnalysis()">开始分析</button>
+  <span id="jobBadge" class="badge pending">未启动</span>
+</header>
+
+<main>
+  <!-- 左：进度 -->
+  <section class="panel" id="progressPanel">
+    <h2>Agent 进度</h2>
+    <div class="body" id="progressBody"></div>
+    <div class="stats" id="statsBox">LLM: 0 | Tools: 0<br>Tokens: --↑ --↓<br>耗时: 00:00</div>
+    <div class="stats" id="currentNodeBox" style="margin-top:6px">当前节点: <b>--</b></div>
+  </section>
+
+  <!-- 中：事实可观测性 -->
+  <section class="panel">
+    <div class="tabs">
+      <button id="tabActivity" class="active" onclick="switchTab('activity')">活动流</button>
+      <button id="tabVerify" onclick="switchTab('verify')">事实校验</button>
+      <button id="tabNodeStats" onclick="switchTab('nodestats')">节点统计</button>
+    </div>
+    <div class="body" id="activityBody" style="font-family: ui-monospace, Menlo, monospace;"></div>
+    <div class="body" id="verifyBody" style="display:none"></div>
+    <div class="body" id="nodeStatsBody" style="display:none"></div>
+  </section>
+
+  <!-- 右：报告 -->
+  <section class="panel">
+    <h2>报告与决策</h2>
+    <div class="body" id="reportBody"><div class="empty">等待分析开始...</div></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+var AGENTS = [
+  ["Analyst Team", ["Fundamentals Analyst (基本面)", "Technical Analyst (技术面)", "Game Theory Analyst (博弈面)", "News Sentiment Analyst (新闻舆情)"]],
+  ["Research Team", ["Bull Researcher", "Bear Researcher", "Research Manager"]],
+  ["Trading Team", ["Trader"]],
+  ["Risk Management", ["Aggressive Analyst", "Conservative Analyst", "Neutral Analyst"]],
+  ["Portfolio Management", ["Portfolio Manager"]],
+];
+var statusMap = {};   // agent -> status
+var verifications = {};  // analyst -> latest verification entry
+var claimsMap = {};      // analyst -> claims
+var startTime = null;
+var timerId = null;
+
+function initAgents() {
+  var html = "";
+  AGENTS.forEach(function (team) {
+    html += "<div style='color:var(--dim);margin-top:8px'>" + team[0] + "</div>";
+    team[1].forEach(function (agent) {
+      statusMap[agent] = "pending";
+      html += '<div class="agent-row"><span>' + agent + '</span><span class="status pending" id="st-' + agent.replace(/[^a-zA-Z]/g, "_") + '">pending</span></div>';
+    });
+  });
+  document.getElementById("progressBody").innerHTML = html;
+}
+
+function setAgent(agent, status) {
+  if (!(agent in statusMap)) return;
+  statusMap[agent] = status;
+  var el = document.getElementById("st-" + agent.replace(/[^a-zA-Z]/g, "_"));
+  if (el) { el.textContent = status; el.className = "status " + status; }
+}
+
+function markAnalystCompleted(reportKey) {
+  var map = {
+    "fundamentals_report": "Fundamentals Analyst (基本面)",
+    "technical_report": "Technical Analyst (技术面)",
+    "game_theory_report": "Game Theory Analyst (博弈面)",
+    "news_sentiment_report": "News Sentiment Analyst (新闻舆情)",
+  };
+  if (map[reportKey]) setAgent(map[reportKey], "completed");
+}
+
+function fmtTokens(n) {
+  return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
+}
+
+function updateStats(stats) {
+  var box = document.getElementById("statsBox");
+  box.innerHTML =
+    "LLM: <b>" + stats.llm_calls + "</b> | Tools: <b>" + stats.tool_calls + "</b><br>" +
+    "Tokens: <b>" + fmtTokens(stats.tokens_in) + "↑ " + fmtTokens(stats.tokens_out) + "↓</b><br>" +
+    "耗时: <b id='elapsed'>00:00</b>";
+}
+
+function updateElapsed() {
+  if (!startTime) return;
+  var s = Math.floor((Date.now() - startTime) / 1000);
+  var el = document.getElementById("elapsed");
+  if (el) el.textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+}
+
+function nowStr() {
+  return new Date().toTimeString().slice(0, 8);
+}
+
+function addActivity(htmlClass, text) {
+  var body = document.getElementById("activityBody");
+  var line = document.createElement("div");
+  line.className = "act-line " + htmlClass;
+  line.innerHTML = '<span class="t">' + nowStr() + '</span>' + escapeHtml(text);
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+  while (body.childNodes.length > 200) body.removeChild(body.firstChild);
+  return line;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function renderVerifications() {
+  var body = document.getElementById("verifyBody");
+  var keys = Object.keys(verifications);
+  if (!keys.length) {
+    body.innerHTML = '<div class="empty">尚无事实校验结果。<br>校验发生在 基本面/技术面/博弈面 分析师完成之后。</div>';
+    return;
+  }
+  var names = { fundamentals: "基本面", technical: "技术面", game_theory: "博弈面" };
+  var html = "";
+  keys.forEach(function (analyst) {
+    var v = verifications[analyst];
+    var claims = claimsMap[analyst] || [];
+    html += '<div class="verify-card">';
+    html += '<div class="verify-head ' + (v.passed ? "pass" : "fail") + '">';
+    html += "<span><b>" + (names[analyst] || analyst) + " 分析师</b> · 第 " + v.attempts + " 轮</span>";
+    html += "<span class='" + (v.passed ? "pass-tag" : "fail-tag") + "'>" + (v.passed ? "✓ 全部通过" : "✗ 存在未通过项") + "</span>";
+    html += "</div>";
+    if (v.items && v.items.length) {
+      html += "<table><tr><th>结论 (Claim)</th><th>类型</th><th>报告值</th><th>期望值</th><th>通过</th><th>差异/原因</th></tr>";
+      v.items.forEach(function (item) {
+        html += "<tr><td>" + escapeHtml(item.claim) + "</td><td>" + escapeHtml(item.verification_type) + "</td><td>" + escapeHtml(item.reported_value) + "</td><td>" + escapeHtml(item.expected_value) + "</td><td>" +
+          (item.passed ? '<span class="pass-tag">✓</span>' : '<span class="fail-tag">✗</span>') + "</td><td>" + escapeHtml(item.failure_reason || item.difference || "") + "</td></tr>";
+      });
+      html += "</table>";
+    }
+    if (v.feedback) html += '<div class="feedback">📋 反馈给分析师：' + escapeHtml(v.feedback) + "</div>";
+    if (claims.length) {
+      html += '<div class="claims-note">来源声明 (' + claims.length + ' 条): ' + claims.map(function (c) {
+        return escapeHtml(c.claim) + " ← " + escapeHtml(c.source_tool);
+      }).join("；") + "</div>";
+    }
+    html += "</div>";
+  });
+  body.innerHTML = html;
+}
+
+function appendReport(agent, report) {
+  var body = document.getElementById("reportBody");
+  var empty = body.querySelector(".empty");
+  if (empty) empty.remove();
+  var section = document.createElement("div");
+  section.className = "report-section";
+  var h = document.createElement("h3");
+  h.textContent = agent;
+  var pre = document.createElement("pre");
+  pre.textContent = report;
+  section.appendChild(h);
+  section.appendChild(pre);
+  body.prepend(section);
+}
+
+function showDecision(report) {
+  var body = document.getElementById("reportBody");
+  var empty = body.querySelector(".empty");
+  if (empty) empty.remove();
+  var box = document.createElement("div");
+  box.className = "decision-box";
+  box.innerHTML = "<h3>🎯 最终决策 (Portfolio Manager)</h3><pre style='white-space:pre-wrap;font-family:inherit'>" + escapeHtml(report) + "</pre>";
+  body.prepend(box);
+}
+
+function switchTab(name) {
+  document.getElementById("activityBody").style.display = name === "activity" ? "" : "none";
+  document.getElementById("verifyBody").style.display = name === "verify" ? "" : "none";
+  document.getElementById("nodeStatsBody").style.display = name === "nodestats" ? "" : "none";
+  document.getElementById("tabActivity").className = name === "activity" ? "active" : "";
+  document.getElementById("tabVerify").className = name === "verify" ? "active" : "";
+  document.getElementById("tabNodeStats").className = name === "nodestats" ? "active" : "";
+}
+
+function renderNodeStats(stats) {
+  if (!stats) return;
+  var body = document.getElementById("nodeStatsBody");
+  var html = "<table><tr><th>图节点</th><th>LLM 调用</th><th>Tokens ↑</th><th>Tokens ↓</th><th>耗时</th></tr>";
+  Object.keys(stats).sort().forEach(function (node) {
+    var s = stats[node];
+    html += "<tr><td>" + escapeHtml(node) + "</td><td>" + s.calls + "</td><td>" + fmtTokens(s.tokens_in) + "</td><td>" + fmtTokens(s.tokens_out) + "</td><td>" + (s.time_ms / 1000).toFixed(1) + "s</td></tr>";
+  });
+  html += "</table>";
+  body.innerHTML = html;
+}
+
+function addLLMCall(ev) {
+  var body = document.getElementById("activityBody");
+  var line = document.createElement("div");
+  line.className = "act-line llm";
+  line.style.cursor = "pointer";
+  var tokens = ev.tokens || {};
+  var head = "✓ LLM [" + escapeHtml(ev.node || "?") + "] 完成 (" + (ev.duration || 0) + "s, " + fmtTokens(tokens.in || 0) + "↑ " + fmtTokens(tokens.out || 0) + "↓) <span style='color:var(--dim)'>(点击展开)</span>";
+  var detail = document.createElement("div");
+  detail.style.display = "none";
+  detail.style.whiteSpace = "pre-wrap";
+  detail.style.fontSize = "11px";
+  detail.style.color = "#aab6c4";
+  detail.innerHTML = "<b>输入:</b> " + escapeHtml(ev.input || "(空)") + "<br><b>输出:</b> " + escapeHtml(ev.output || "(空)");
+  line.innerHTML = '<span class="t">' + nowStr() + '</span>' + head;
+  line.appendChild(detail);
+  line.onclick = function () {
+    detail.style.display = detail.style.display === "none" ? "" : "none";
+  };
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+  while (body.childNodes.length > 200) body.removeChild(body.firstChild);
+}
+
+function setBadge(text, cls) {
+  var b = document.getElementById("jobBadge");
+  b.textContent = text;
+  b.className = "badge " + cls;
+}
+
+function startAnalysis() {
+  var ticker = document.getElementById("ticker").value.trim();
+  var date = document.getElementById("date").value;
+  var depth = document.getElementById("depth").value;
+  var sel = document.getElementById("analysts");
+  var analysts = Array.from(sel.selectedOptions).map(function (o) { return o.value; });
+  if (!ticker || !date) { alert("请输入标的与日期"); return; }
+
+  document.getElementById("startBtn").disabled = true;
+  setBadge("启动中...", "pending");
+  document.getElementById("activityBody").innerHTML = "";
+  document.getElementById("reportBody").innerHTML = '<div class="empty">等待分析开始...</div>';
+  document.getElementById("verifyBody").innerHTML = "";
+  verifications = {}; claimsMap = {};
+  initAgents();
+  startTime = Date.now();
+  if (timerId) clearInterval(timerId);
+  timerId = setInterval(updateElapsed, 1000);
+
+  fetch("/api/v1/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ticker: ticker, date: date, analysts: analysts, depth: parseInt(depth, 10), language: "Chinese" }),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (job) {
+      setBadge("运行中", "running");
+      addActivity("ticker", "会话已开启 job=" + job.job_id + " 标的=" + ticker + " 日期=" + date);
+      var es = new EventSource("/api/v1/analyze/" + job.job_id + "/stream");
+      es.onmessage = function (e) {
+        var ev = JSON.parse(e.data);
+        handleEvent(ev, es);
+      };
+      es.onerror = function () { es.close(); };
+    })
+    .catch(function (err) {
+      setBadge("失败", "failed");
+      addActivity("error", "启动失败: " + err);
+      document.getElementById("startBtn").disabled = false;
+    });
+}
+
+function handleEvent(ev, es) {
+  switch (ev.event) {
+    case "analysis_started":
+      setAgent("Fundamentals Analyst (基本面)", "in_progress");
+      setAgent("Technical Analyst (技术面)", "in_progress");
+      setAgent("Game Theory Analyst (博弈面)", "in_progress");
+      setAgent("News Sentiment Analyst (新闻舆情)", "in_progress");
+      break;
+    case "agent_completed":
+      markAnalystCompleted(ev.report_key);
+      if (ev.agent === "Research Manager") { setAgent("Bull Researcher", "completed"); setAgent("Bear Researcher", "completed"); setAgent("Research Manager", "completed"); setAgent("Trader", "in_progress"); }
+      if (ev.agent === "Trader") { setAgent("Trader", "completed"); setAgent("Aggressive Analyst", "in_progress"); }
+      appendReport(ev.agent, ev.report);
+      break;
+    case "decision":
+      setAgent("Aggressive Analyst", "completed");
+      setAgent("Conservative Analyst", "completed");
+      setAgent("Neutral Analyst", "completed");
+      setAgent("Portfolio Manager", "completed");
+      showDecision(ev.report);
+      break;
+    case "claims":
+      claimsMap[ev.analyst] = ev.claims;
+      renderVerifications();
+      break;
+    case "verification":
+      verifications[ev.analyst] = ev;
+      renderVerifications();
+      if (ev.passed) {
+        addActivity("done", "FactChecker-" + ev.analyst + " 第" + ev.attempts + "轮校验 ✓ 通过");
+      } else {
+        addActivity("error", "FactChecker-" + ev.analyst + " 第" + ev.attempts + "轮校验 ✗ 未通过 → 反馈分析师重做");
+      }
+      break;
+    case "tool":
+      if (ev.status === "running") addActivity("running", "⚙ " + ev.name + "(" + escapeHtml(ev.args || "") + ") 执行中...");
+      else if (ev.status === "done") addActivity("done", "✓ " + ev.name + " 完成 " + escapeHtml(ev.detail || ""));
+      else addActivity("error", "✗ " + ev.name + " 失败 " + escapeHtml(ev.detail || ""));
+      break;
+    case "llm_call":
+      addLLMCall(ev);
+      if (ev.node_stats) renderNodeStats(ev.node_stats);
+      break;
+    case "node":
+      document.getElementById("currentNodeBox").innerHTML = "当前节点: <b>" + escapeHtml(ev.node) + "</b> " + (ev.node_stats ? "(该节点已花费 " + (ev.node_stats[ev.node] ? (ev.node_stats[ev.node].time_ms / 1000).toFixed(1) + "s" : "-") + ")" : "");
+      if (ev.node_stats) renderNodeStats(ev.node_stats);
+      break;
+    case "ticker":
+      addActivity("ticker", "🔒 标的代码归一化: " + escapeHtml(ev.previous) + " → " + escapeHtml(ev.ticker));
+      break;
+    case "stats":
+      updateStats(ev.stats);
+      break;
+    case "completed":
+      if (ev.stats) updateStats(ev.stats);
+      if (ev.node_stats) renderNodeStats(ev.node_stats);
+      setBadge("完成", "completed");
+      addActivity("done", "✅ 分析完成 决策: " + escapeHtml(ev.decision || "-"));
+      document.getElementById("startBtn").disabled = false;
+      es.close();
+      break;
+    case "error":
+      setBadge("失败", "failed");
+      addActivity("error", "❌ 分析失败: " + escapeHtml(ev.error));
+      document.getElementById("startBtn").disabled = false;
+      es.close();
+      break;
+  }
+}
+
+document.getElementById("date").value = new Date().toISOString().slice(0, 10);
+initAgents();
+// Enter key in ticker/date fields also starts the analysis
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Enter" && document.activeElement &&
+      (document.activeElement.id === "ticker" || document.activeElement.id === "date")) {
+    startAnalysis();
+  }
+});
+</script>
+</body>
+</html>

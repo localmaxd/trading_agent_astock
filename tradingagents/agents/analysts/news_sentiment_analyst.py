@@ -6,11 +6,18 @@ from tradingagents.agents.utils.agent_utils import (
 )
 
 
-def create_news_sentiment_analyst(llm):
+def create_news_sentiment_analyst(llm, extra_tools=None):
+    """Create the news & sentiment analyst node.
+
+    Args:
+        llm: The LLM to use.
+        extra_tools: Optional additional tools (e.g. web_search_tool) the
+            analyst may choose to call.
+    """
     def news_sentiment_analyst_node(state):
         current_date = state["trade_date"]
         instrument_context = build_instrument_context(state["company_of_interest"])
-        tools = [tool_news_sentiment]
+        tools = [tool_news_sentiment] + (extra_tools or [])
 
         system_message = (
             "你是一位新闻舆情研究员，负责分析该股票的新闻、公告和市场情绪。\n"
@@ -41,15 +48,17 @@ def create_news_sentiment_analyst(llm):
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
 
+        # The analyst runs in a parallel branch with its own message channel
+        messages = state.get("messages_news_sentiment", []) or []
         chain = prompt | llm.bind_tools(tools)
-        result = chain.invoke(state["messages"])
+        result = chain.invoke(messages)
 
         report = ""
         if len(result.tool_calls) == 0:
             report = result.content
 
         return {
-            "messages": [result],
+            "messages_news_sentiment": [result],
             "news_sentiment_report": report,
         }
 

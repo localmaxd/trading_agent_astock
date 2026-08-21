@@ -20,10 +20,12 @@ from typing import Annotated
 from typing_extensions import TypedDict
 
 from langgraph.graph import MessagesState
+from langgraph.graph.message import add_messages
 
 from tradingagents.agents.utils.agent_states import (
     InvestDebateState,
     RiskDebateState,
+    merge_verification_state,
 )
 
 # ---------------------------------------------------------------------------
@@ -44,6 +46,15 @@ class AnalystTeamSubgraphState(MessagesState):
     technical_report: Annotated[str, "Report from the Technical Analyst (技术面)"]
     game_theory_report: Annotated[str, "Report from the Game Theory Analyst (博弈面)"]
     news_sentiment_report: Annotated[str, "Report from the News & Sentiment Analyst (新闻舆情)"]
+    fundamentals_claims: Annotated[list, "Structured claims with sources from the Fundamentals Analyst"]
+    technical_claims: Annotated[list, "Structured claims with sources from the Technical Analyst"]
+    game_theory_claims: Annotated[list, "Structured claims with sources from the Game Theory Analyst"]
+    verification_state: Annotated[dict, merge_verification_state]
+    # Per-analyst parallel message channels (analyst <-> tools loops)
+    messages_fundamentals: Annotated[list, add_messages]
+    messages_technical: Annotated[list, add_messages]
+    messages_game_theory: Annotated[list, add_messages]
+    messages_news_sentiment: Annotated[list, add_messages]
 
 
 # ---------------------------------------------------------------------------

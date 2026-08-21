@@ -181,6 +181,7 @@ def _make_config(tmp_path, checkpoint_enabled=False):
     config["checkpoint_enabled"] = checkpoint_enabled
     config["max_debate_rounds"] = 1
     config["max_risk_discuss_rounds"] = 1
+    config["verify_enabled"] = False  # fact-checker covered in test_fact_checker.py
     return config
 
 

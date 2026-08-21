@@ -1,7 +1,9 @@
+import json
 import os
 from typing import Any, Optional
 
 from langchain_core.messages import AIMessage
+from langchain_core.output_parsers import JsonOutputParser
 from langchain_openai import ChatOpenAI
 
 from .base_client import BaseLLMClient, normalize_content
@@ -101,7 +103,70 @@ class DeepSeekChatOpenAI(NormalizedChatOpenAI):
                 "output is unavailable. Agent factories fall back to "
                 "free-text generation automatically."
             )
+        # DeepSeek V4 series run in thinking mode, which REJECTS any explicit
+        # tool_choice (HTTP 400 "Thinking mode does not support this
+        # tool_choice") and does not support response_format json_schema.
+        # The only working structured path is response_format=json_object +
+        # Pydantic parsing, so default to that for V4 models instead of the
+        # function-calling path the base class would use.
+        if method is None and (self.model_name or "").lower().startswith("deepseek-v4"):
+            return _DeepSeekJsonModeLLM(self, schema)
         return super().with_structured_output(schema, method=method, **kwargs)
+
+
+class _DeepSeekJsonModeLLM:
+    """Structured-output binding for DeepSeek V4 thinking models.
+
+    Wraps the raw LLM with response_format json_object (supported by the V4
+    API, no tool_choice involved) and parses the model's JSON reply into the
+    requested Pydantic schema via JsonOutputParser.
+
+    If the model returns malformed JSON, invoke raises OutputParserException
+    and the agent factories (structured.py, fact_checker.py) fall back to
+    free-text generation as usual.
+    """
+
+    def __init__(self, llm: "DeepSeekChatOpenAI", schema: Any):
+        self._llm = llm.bind(response_format={"type": "json_object"})
+        self._parser = JsonOutputParser()
+        self._schema = schema
+
+    def _format_instructions(self) -> str:
+        """JSON Schema of the target model, injected into the prompt.
+
+        json_object mode does not constrain the field names, and V4 thinking
+        models otherwise invent their own keys (e.g. overall_pass instead of
+        overall_passed). Embedding the exact schema makes the reply parseable.
+        """
+        return (
+            "\n\n[输出格式要求] 你必须输出一个 JSON 对象，字段名必须与以下 JSON "
+            "Schema 完全一致（含嵌套字段），不要输出任何多余文字：\n"
+            + json.dumps(self._schema.model_json_schema(), ensure_ascii=False)
+        )
+
+    def _append_instructions(self, prompt) -> Any:
+        instructions = self._format_instructions()
+        if isinstance(prompt, str):
+            return prompt + instructions
+        if isinstance(prompt, list) and prompt:
+            out = list(prompt)
+            last = out[-1]
+            if isinstance(last, dict):
+                out[-1] = {**last, "content": str(last.get("content", "")) + instructions}
+            else:
+                out.append({"role": "user", "content": instructions})
+            return out
+        return prompt
+
+    def invoke(self, prompt, **kwargs):
+        raw = self._llm.invoke(self._append_instructions(prompt), **kwargs)
+        data = self._parser.invoke(raw)  # dict (raises OutputParserException on bad JSON)
+        return self._schema.model_validate(data)
+
+    async def ainvoke(self, prompt, **kwargs):
+        raw = await self._llm.ainvoke(self._append_instructions(prompt), **kwargs)
+        data = await self._parser.ainvoke(raw)
+        return self._schema.model_validate(data)
 
 # Kwargs forwarded from user config to ChatOpenAI
 _PASSTHROUGH_KWARGS = (

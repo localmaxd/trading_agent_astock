@@ -74,6 +74,9 @@ class GraphSetup:
             tool_nodes=self.tool_nodes,
             conditional_logic=self.conditional_logic,
             selected_analysts=selected_analysts,
+            # The fact-checker does the careful re-verification work, so it
+            # gets the deep-thinking LLM when one is configured.
+            verify_llm=self.deep_thinking_llm,
         )
         research_debate = build_research_debate_subgraph(
             quick_thinking_llm=self.quick_thinking_llm,

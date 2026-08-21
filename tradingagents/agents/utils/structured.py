@@ -71,3 +71,42 @@ def invoke_structured_or_freetext(
 
     response = plain_llm.invoke(prompt)
     return response.content
+
+
+def invoke_factual_report(
+    structured_llm: Optional[Any],
+    plain_llm: Any,
+    prompt: Any,
+    agent_name: str,
+) -> tuple[str, list]:
+    """Run an AnalystFactualReport call, returning (markdown, claims).
+
+    Unlike invoke_structured_or_freetext (which renders to a string), the
+    analyst finalizers need the machine-checkable claim list in addition to
+    the rendered markdown. When structured output is unavailable or fails,
+    falls back to free text with an empty claim list (the fact-checker then
+    works from the report markdown itself).
+
+    Returns:
+        (report_markdown: str, claims: list[dict])
+    """
+    from tradingagents.agents.schemas import (
+        AnalystFactualReport,
+        claims_to_json,
+        render_factual_report,
+    )
+
+    if structured_llm is not None:
+        try:
+            result = structured_llm.invoke(prompt)
+            if isinstance(result, AnalystFactualReport):
+                return result.report_markdown, claims_to_json(result.claims)
+            return render_factual_report(result), []
+        except Exception as exc:
+            logger.warning(
+                "%s: structured factual report failed (%s); falling back to free text",
+                agent_name, exc,
+            )
+
+    response = plain_llm.invoke(prompt)
+    return response.content, []

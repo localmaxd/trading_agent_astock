@@ -105,6 +105,9 @@ def _make_config(tmp_path, checkpoint_enabled=False):
     config["checkpoint_enabled"] = checkpoint_enabled
     config["max_debate_rounds"] = 1
     config["max_risk_discuss_rounds"] = 1
+    # These tests focus on subgraph structure / ticker guards; the fact-checker
+    # is exercised in tests/test_fact_checker.py with mocked tools.
+    config["verify_enabled"] = False
     return config
 
 
@@ -160,12 +163,43 @@ class TestStageSubgraphInternals:
     def test_analyst_team_subgraph_nodes(self, tmp_path):
         ta = _build_graph(_make_config(tmp_path))
         nodes = _subgraph_nodes(ta.workflow, "Analyst Team")
+        # verify_enabled=False in this suite: no FactChecker nodes expected,
+        # and no Msg Clear nodes (parallel branches need no clearing)
         assert nodes == sorted([
-            "Fundamentals Analyst", "Msg Clear Fundamentals", "tools_fundamentals",
-            "Technical Analyst", "Msg Clear Technical", "tools_technical",
-            "Game_Theory Analyst", "Msg Clear Game_Theory", "tools_game_theory",
-            "News_Sentiment Analyst", "Msg Clear News_Sentiment", "tools_news_sentiment",
+            "Fundamentals Analyst", "tools_fundamentals",
+            "Technical Analyst", "tools_technical",
+            "Game_Theory Analyst", "tools_game_theory",
+            "News_Sentiment Analyst", "tools_news_sentiment",
         ])
+
+    def test_analyst_team_subgraph_includes_fact_checkers_when_enabled(self, tmp_path):
+        config = _make_config(tmp_path)
+        config["verify_enabled"] = True
+        ta = _build_graph(config)
+        nodes = _subgraph_nodes(ta.workflow, "Analyst Team")
+        for extra in (
+            "FactChecker-Fundamentals", "RetryClear-Fundamentals",
+            "FactChecker-Technical", "RetryClear-Technical",
+            "FactChecker-Game_Theory", "RetryClear-Game_Theory",
+        ):
+            assert extra in nodes, f"missing {extra}"
+        assert "FactChecker-News_Sentiment" not in nodes  # news sentiment is not verified
+
+    def test_analysts_run_in_parallel_from_start(self, tmp_path):
+        """Every analyst must be reachable directly from START (fan-out):
+        the four analysts run concurrently, not sequentially."""
+        ta = _build_graph(_make_config(tmp_path))
+        compiled = ta.workflow.nodes["Analyst Team"].runnable
+        edges = {(e.source, e.target) for e in compiled.get_graph().edges}
+        for analyst in (
+            "Fundamentals Analyst",
+            "Technical Analyst",
+            "Game_Theory Analyst",
+            "News_Sentiment Analyst",
+        ):
+            assert ("__start__", analyst) in edges, f"{analyst} not fanned out from START"
+        # No sequential hand-off edges between analysts
+        assert ("Fundamentals Analyst", "Technical Analyst") not in edges
 
     def test_research_debate_subgraph_nodes(self, tmp_path):
         ta = _build_graph(_make_config(tmp_path))

@@ -29,7 +29,8 @@ from .ticker_guard import normalize_ticker
 
 # Import external API tools for the 5 analysts
 from tradingagents.agents.utils.external_api_tools import (
-    tool_fundamental, tool_technical, tool_special_data,
+    tool_fundamental, tool_technical,
+    # tool_special_data,  # 外部 API 无此接口，已停用（2026-08）
     tool_game_theory, tool_risk, tool_news_sentiment,
 )
 
@@ -148,12 +149,18 @@ class TradingAgentsGraph:
         return kwargs
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
-        """Create tool nodes for the 4 analysts using external API tools."""
+        """Create tool nodes for the 4 analysts using external API tools.
+
+        The analysts run in parallel, so each tool node writes to its own
+        message channel (messages_<analyst>) to keep the conversations
+        isolated.
+        """
         return {
-            "fundamentals": ToolNode([tool_fundamental]),
-            "technical": ToolNode([tool_technical, tool_special_data]),
-            "game_theory": ToolNode([tool_game_theory]),
-            "news_sentiment": ToolNode([tool_news_sentiment]),
+            "fundamentals": ToolNode([tool_fundamental], messages_key="messages_fundamentals"),
+            # tool_special_data 外部 API 无此接口，已停用（2026-08）
+            "technical": ToolNode([tool_technical], messages_key="messages_technical"),
+            "game_theory": ToolNode([tool_game_theory], messages_key="messages_game_theory"),
+            "news_sentiment": ToolNode([tool_news_sentiment], messages_key="messages_news_sentiment"),
         }
 
     def _fetch_returns(
@@ -401,6 +408,7 @@ class TradingAgentsGraph:
             },
             "investment_plan": final_state["investment_plan"],
             "final_trade_decision": final_state["final_trade_decision"],
+            "verification_state": final_state.get("verification_state", {}),
         }
 
         safe_ticker = safe_ticker_component(self.ticker)

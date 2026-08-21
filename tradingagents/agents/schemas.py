@@ -226,3 +226,152 @@ def render_pm_decision(decision: PortfolioDecision) -> str:
     if decision.time_horizon:
         parts.extend(["", f"**Time Horizon**: {decision.time_horizon}"])
     return "\n".join(parts)
+
+# ---------------------------------------------------------------------------
+# Analyst factual reports (structured claims + sources)
+# ---------------------------------------------------------------------------
+
+
+class AnalystClaim(BaseModel):
+    """One factual claim from an analyst's report, with its provenance.
+
+    Every quantitative statement an analyst makes must be traceable: the
+    claim text, the value it carries, the tool that provided the original
+    data, and the verbatim excerpt from that tool's output. The fact-checker
+    node uses these to verify the report against freshly fetched data.
+    """
+
+    claim: str = Field(
+        description="The conclusion or data point, one sentence.",
+    )
+    value: str = Field(
+        description="The numerical value or qualitative conclusion as a string.",
+    )
+    source_tool: str = Field(
+        description="Name of the tool that provided the original data, e.g. tool_fundamental / tool_technical.",
+    )
+    source_data: str = Field(
+        description="Verbatim excerpt from the tool output backing this claim. Must be copied from the original tool result, never invented.",
+    )
+
+
+class AnalystFactualReport(BaseModel):
+    """Structured analyst output: full markdown report + claim list.
+
+    report_markdown keeps the existing prose report intact for downstream
+    consumers (researchers, trader, saved files); claims is the
+    machine-checkable list the fact-checker verifies.
+    """
+
+    summary: str = Field(
+        description="One-paragraph summary of the overall assessment.",
+    )
+    claims: list[AnalystClaim] = Field(
+        description="Every key data point / conclusion of the report with its source tool and raw source data.",
+    )
+    report_markdown: str = Field(
+        description="The complete report in markdown, same shape as before (headings, tables, reasoning).",
+    )
+
+
+def render_factual_report(report: AnalystFactualReport) -> str:
+    """Render an AnalystFactualReport back to plain markdown for downstream use."""
+    return report.report_markdown
+
+
+def claims_to_json(claims: list[AnalystClaim]) -> list[dict]:
+    """Serialize claims to plain dicts for storage in the graph state."""
+    return [c.model_dump() for c in claims]
+
+
+# ---------------------------------------------------------------------------
+# Fact verification (fact-checker node output)
+# ---------------------------------------------------------------------------
+
+
+class FactVerificationItem(BaseModel):
+    """One verification result for a single claim in an analyst report."""
+
+    claim: str = Field(description="The claim being verified (verbatim from the report).")
+    verification_type: str = Field(
+        description="Either 'fact' (cross-checked against tool data) or 'calculation' (re-computed).",
+    )
+    source_tool: str = Field(
+        description="Tool whose freshly fetched data was used to verify this claim.",
+    )
+    reported_value: str = Field(
+        description="Value stated in the analyst report.",
+    )
+    expected_value: str = Field(
+        description="Value derived from the freshly fetched data / re-calculation.",
+    )
+    passed: bool = Field(
+        description="True when reported and expected values agree within tolerance.",
+    )
+    difference: str = Field(
+        default="",
+        description="Quantified difference when the check failed, otherwise empty.",
+    )
+    failure_reason: str = Field(
+        default="",
+        description="Plain-language explanation of why the check failed (empty when passed).",
+    )
+
+
+class FactVerificationReport(BaseModel):
+    """Structured output of the fact-checker node for one analyst."""
+
+    items: list[FactVerificationItem] = Field(
+        description="Verification results for every key claim in the report.",
+    )
+    overall_passed: bool = Field(
+        description="True only when every item passed.",
+    )
+    feedback: str = Field(
+        description="Concrete feedback for the analyst when overall_passed is False: which claims failed, what the expected values are, and what to redo. Empty when passed.",
+    )
+
+
+class VerificationSearchPlan(BaseModel):
+    """Search plan produced by the fact-checker before the web-search rounds.
+
+    The verifier LLM inspects the report and its claims, then decides which
+    facts need confirmation on the public channel (eastmoney.com etc.).
+    Every query in the list is executed by the fact-checker node in code; a
+    second planning round may add follow-up queries based on the results
+    already gathered.
+    """
+
+    queries: list[str] = Field(
+        description=(
+            "Search queries to execute (0-N). Each should target one fact of "
+            "the report that needs public-channel confirmation, e.g. "
+            "'site:eastmoney.com 600519.SH 业绩预告'. Facts already verifiable "
+            "from the internal tool data (re-computable ratios, dual-source "
+            "fund flow) do NOT need a search."
+        ),
+    )
+    rationale: str = Field(
+        default="",
+        description="Why these searches are needed (one or two sentences).",
+    )
+
+
+def render_verification_report(verification: FactVerificationReport) -> str:
+    """Render a FactVerificationReport to markdown (for logs / display)."""
+    lines = [
+        f"**Overall**: {'PASSED' if verification.overall_passed else 'FAILED'}",
+        "",
+        "| Claim | Type | Reported | Expected | Passed |",
+        "|---|---|---|---|---|",
+    ]
+    for item in verification.items:
+        lines.append(
+            f"| {item.claim[:60]} | {item.verification_type} | "
+            f"{item.reported_value[:40]} | {item.expected_value[:40]} | "
+            f"{'PASS' if item.passed else 'FAIL'} |"
+        )
+    if verification.feedback:
+        lines.extend(["", f"**Feedback**: {verification.feedback}"])
+    return "\n".join(lines)
+

@@ -67,13 +67,14 @@ def tool_news_sentiment(
     return _call("risk_sentiment", ts_code, end_date)
 
 
-@tool
-def tool_special_data(
-    ts_code: Annotated[str, "股票代码，格式如600519.SH或300394.SZ"],
-    end_date: Annotated[str, "截止日期YYYY-MM-DD"] = "",
-) -> str:
-    """特殊数据：市场环境综合评分(0-8)、趋势判断、主线行业TOP5、风险信号、仓位上限建议。"""
-    return _call("special_data", ts_code, end_date)
+# @tool
+# def tool_special_data(
+#     ts_code: Annotated[str, "股票代码，格式如600519.SH或300394.SZ"],
+#     end_date: Annotated[str, "截止日期YYYY-MM-DD"] = "",
+# ) -> str:
+#     """特殊数据：市场环境综合评分(0-8)、趋势判断、主线行业TOP5、风险信号、仓位上限建议。"""
+#     return _call("special_data", ts_code, end_date)
+# NOTE: 外部 API 服务无 special_data 接口，此工具已停用（2026-08）
 
 @tool
 def position(ts_code: Annotated[str, "股票代码，格式如600519.SH或300394.SZ"])->str:

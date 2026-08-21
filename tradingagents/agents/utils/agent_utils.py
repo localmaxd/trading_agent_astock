@@ -1,6 +1,32 @@
 from langchain_core.messages import HumanMessage, RemoveMessage
 
 
+# Instruction appended to the analyst's structured finalizer prompt so the
+# model emits AnalystFactualReport with traceable claims (claim -> source
+# tool -> verbatim raw data excerpt) that the fact-checker can verify.
+STRUCTURED_REPORT_INSTRUCTION = (
+    "将对话中已完成的全部分析整理为结构化报告（AnalystFactualReport）：\n"
+    "1. report_markdown：完整的 Markdown 报告正文（保持原有格式：标题、表格、推理）。\n"
+    "2. claims：列出报告中每一个关键数据点/结论，每条必须包含：\n"
+    "   - claim：结论描述（一句话）；\n"
+    "   - value：数值或定性结论；\n"
+    "   - source_tool：提供该数据的工具名（如 tool_fundamental / tool_technical）；\n"
+    "   - source_data：从工具返回内容中逐字摘录的原始数据片段，禁止编造。\n"
+    "source_data 必须能在对话中的工具返回里找到原文，找不到原文的数据点不得列入 claims。"
+)
+
+
+def get_verify_feedback(state: dict, analyst_type: str) -> str:
+    """Return the latest fact-checker feedback for an analyst, if any.
+
+    The feedback is injected into the analyst's prompt so a failed
+    verification round makes the analyst redo its material with concrete
+    corrections, instead of repeating the same mistakes.
+    """
+    vs = (state.get("verification_state") or {}).get(analyst_type) or {}
+    return vs.get("feedback", "") or ""
+
+
 def get_language_instruction() -> str:
     """Return a prompt instruction for the configured output language."""
     from tradingagents.dataflows.config import get_config
@@ -172,13 +198,21 @@ def build_instrument_context(ticker: str) -> str:
     )
 
 
-def create_msg_delete():
+def create_msg_delete(messages_key: str = "messages"):
+    """Create a message-clearing node for one conversation channel.
+
+    Args:
+        messages_key: Which message channel to clear. The parallel analyst
+            stage uses one channel per analyst (messages_fundamentals, ...);
+            the default "messages" keeps the legacy behaviour.
+    """
+
     def delete_messages(state):
-        """Clear messages and add placeholder for Anthropic compatibility"""
-        messages = state["messages"]
+        """Clear the channel's messages and add placeholder for Anthropic compatibility"""
+        messages = state.get(messages_key, []) or []
         removal_operations = [RemoveMessage(id=m.id) for m in messages]
         placeholder = HumanMessage(content="Continue")
-        return {"messages": removal_operations + [placeholder]}
+        return {messages_key: removal_operations + [placeholder]}
 
     return delete_messages
 

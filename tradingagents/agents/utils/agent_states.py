@@ -1,6 +1,23 @@
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import MessagesState
+from langgraph.graph.message import add_messages
+
+
+def merge_verification_state(left: dict, right: dict) -> dict:
+    """Reducer for the verification_state channel.
+
+    The fact-checkers of the parallel analysts update this channel
+    concurrently; each writes only its own analyst key, so merging by key
+    is safe and last-write-wins per analyst.
+    """
+    if not left:
+        return right
+    if not right:
+        return left
+    merged = dict(left)
+    merged.update(right)
+    return merged
 
 
 # Researcher team state
@@ -57,6 +74,25 @@ class AgentState(MessagesState):
     technical_report: Annotated[str, "Report from the Technical Analyst (技术面)"]
     game_theory_report: Annotated[str, "Report from the Game Theory Analyst (博弈面)"]
     news_sentiment_report: Annotated[str, "Report from the News & Sentiment Analyst (新闻舆情)"]
+
+    # Structured claims (AnalystClaim dicts) backing each verified report.
+    # Populated by the analyst finalizers; consumed by the fact-checker nodes.
+    fundamentals_claims: Annotated[list, "Structured claims with sources from the Fundamentals Analyst"]
+    technical_claims: Annotated[list, "Structured claims with sources from the Technical Analyst"]
+    game_theory_claims: Annotated[list, "Structured claims with sources from the Game Theory Analyst"]
+
+    # Per-analyst message channels: the four analysts run in PARALLEL inside
+    # the Analyst Team stage, so each keeps its own tool-loop conversation
+    # (analyst <-> tools) without cross-contamination. The shared 'messages'
+    # channel remains for the downstream stages.
+    messages_fundamentals: Annotated[list, add_messages]
+    messages_technical: Annotated[list, add_messages]
+    messages_game_theory: Annotated[list, add_messages]
+    messages_news_sentiment: Annotated[list, add_messages]
+
+    # Fact-checker bookkeeping per analyst: attempts / passed / feedback / items.
+    # Merged by analyst key because the parallel fact-checkers write concurrently.
+    verification_state: Annotated[dict, merge_verification_state]
 
     # researcher team discussion step
     investment_debate_state: Annotated[
