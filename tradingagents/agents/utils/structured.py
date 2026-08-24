@@ -23,6 +23,8 @@ from typing import Any, Callable, Optional, TypeVar
 
 from pydantic import BaseModel
 
+from tradingagents.errors import AnalysisStopped
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
@@ -63,6 +65,8 @@ def invoke_structured_or_freetext(
         try:
             result = structured_llm.invoke(prompt)
             return render(result)
+        except AnalysisStopped:
+            raise  # 停止信号：不做降级，直接中断整个运行
         except Exception as exc:
             logger.warning(
                 "%s: structured-output invocation failed (%s); retrying once as free text",
@@ -102,6 +106,8 @@ def invoke_factual_report(
             if isinstance(result, AnalystFactualReport):
                 return result.report_markdown, claims_to_json(result.claims)
             return render_factual_report(result), []
+        except AnalysisStopped:
+            raise  # 停止信号：不做降级，直接中断整个运行
         except Exception as exc:
             logger.warning(
                 "%s: structured factual report failed (%s); falling back to free text",
@@ -110,3 +116,34 @@ def invoke_factual_report(
 
     response = plain_llm.invoke(prompt)
     return response.content, []
+
+
+def invoke_factual_claims(
+    structured_llm: Optional[Any],
+    prompt: Any,
+    agent_name: str,
+) -> list:
+    """Extract bounded provenance without regenerating the full report.
+
+    If structured extraction fails, return no claims and let the fact-checker
+    extract facts from the report text. Avoiding a free-text retry here keeps a
+    parser failure from doubling the most token-heavy analyst turn.
+    """
+    if structured_llm is None:
+        return []
+    from tradingagents.agents.schemas import AnalystClaimSet, claims_to_json
+
+    try:
+        result = structured_llm.invoke(prompt)
+        if isinstance(result, AnalystClaimSet):
+            return claims_to_json(result.claims)
+        return claims_to_json(getattr(result, "claims", []) or [])
+    except AnalysisStopped:
+        raise  # 停止信号：不做降级，直接中断整个运行
+    except Exception as exc:
+        logger.warning(
+            "%s: structured claim extraction failed (%s); "
+            "continuing with report-text verification",
+            agent_name, exc,
+        )
+        return []

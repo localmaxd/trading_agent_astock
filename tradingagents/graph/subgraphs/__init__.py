@@ -5,10 +5,14 @@ orchestrated by a thin parent graph:
 
     Analyst Team -> Research Debate -> Trader -> Risk Debate -> Portfolio Manager
 
-Each builder returns a compiled StateGraph whose state schema is a strict
-subset of AgentState (see states.py). The parent graph embeds them as
-nodes and routes sequentially; LangGraph merges each subgraph's written
-channels back into the parent state.
+The Analyst Team stage is itself a parallel coordinator containing one
+compiled subgraph per selected analyst (fundamentals / technical / game
+theory / news sentiment / macro). Each analyst subgraph owns its analyst,
+tool, fact-check and retry nodes (macro: tool only, no fact-check/retry).
+
+Every builder returns a compiled StateGraph whose state schema is a strict
+subset of its parent state (see states.py). LangGraph merges only the output
+channels explicitly owned by each subgraph back into its parent.
 """
 
 from .states import (

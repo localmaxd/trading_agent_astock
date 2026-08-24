@@ -11,6 +11,7 @@ def create_conservative_debator(llm):
         technical_report = state["technical_report"]
         game_theory_report = state["game_theory_report"]
         news_sentiment_report = state["news_sentiment_report"]
+        macro_environment_report = state["macro_environment_report"]
 
         trader_decision = state["trader_investment_plan"]
 
@@ -27,6 +28,8 @@ You are a senior portfolio risk manager (CFA/FRM) whose value function prioritiz
 【Game Theory / Positioning Report】{game_theory_report}
 
 【News & Sentiment Report】{news_sentiment_report}
+
+【Market Environment Report】{macro_environment_report}
 
 【Debate History】{history}
 

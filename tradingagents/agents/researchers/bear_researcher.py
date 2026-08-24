@@ -11,19 +11,20 @@ def create_bear_researcher(llm):
         technical_report = state["technical_report"]
         game_theory_report = state["game_theory_report"]
         news_sentiment_report = state["news_sentiment_report"]
+        macro_environment_report = state["macro_environment_report"]
 
         round_num = 1 + investment_debate_state.get("count", 0)
 
         if round_num <= 1:
             prompt = _round1_prompt(
                 fundamentals_report, technical_report, game_theory_report,
-                news_sentiment_report, current_response
+                news_sentiment_report, macro_environment_report, current_response
             )
         else:
             prompt = _round_n_prompt(
                 fundamentals_report, technical_report, game_theory_report,
-                news_sentiment_report, history, current_response,
-                round_num
+                news_sentiment_report, macro_environment_report, history,
+                current_response, round_num
             )
 
         response = llm.invoke(prompt)
@@ -46,7 +47,7 @@ _ANTI_HALLUCINATION = """
 # ANTI-HALLUCINATION PROTOCOL
 
 【Knowledge Sandbox】
-You are in a closed information environment. ONLY the four provided reports are valid data sources. Your training knowledge about this company, industry, or macro trends is FORBIDDEN unless explicitly confirmed by the reports. If a fact is not in the reports, declare 【DATA GAP】.
+You are in a closed information environment. ONLY the five provided reports are valid data sources. Your training knowledge about this company, industry, or macro trends is FORBIDDEN unless explicitly confirmed by the reports. If a fact is not in the reports, declare 【DATA GAP】.
 
 【Data Anchor Requirement】
 Every quantitative claim (>5% probability shifts, ratio comparisons, YoY/QoQ changes) must be followed by:
@@ -72,7 +73,7 @@ End your response with:
 
 
 def _round1_prompt(fundamentals_report, technical_report, game_theory_report,
-                   news_sentiment_report, current_response):
+                   news_sentiment_report, macro_environment_report, current_response):
     return f"""# Role Definition
 You are a senior bear analyst (CFA/CPA) specializing in asymmetric downside identification. Your objective is to maintain a **probability-weighted** bearish thesis that evolves under evidence.
 
@@ -88,6 +89,7 @@ You are a senior bear analyst (CFA/CPA) specializing in asymmetric downside iden
 【Technical Analysis Report】{technical_report}
 【Game Theory / Positioning Report】{game_theory_report}
 【News & Sentiment Report】{news_sentiment_report}
+【Market Environment Report】{macro_environment_report}
 【Bull Argument to Refute】{current_response}
 
 # Core Tasks
@@ -109,8 +111,8 @@ You are a senior bear analyst (CFA/CPA) specializing in asymmetric downside iden
 
 
 def _round_n_prompt(fundamentals_report, technical_report, game_theory_report,
-                    news_sentiment_report, history, current_response,
-                    round_num):
+                    news_sentiment_report, macro_environment_report, history,
+                    current_response, round_num):
     force_resolve = round_num >= 3
 
     return f"""# Role Definition
@@ -131,6 +133,7 @@ You are a senior bear analyst (CFA/CPA) in **Round {round_num} adversarial updat
 【Technical Analysis Report】{technical_report}
 【Game Theory / Positioning Report】{game_theory_report}
 【News & Sentiment Report】{news_sentiment_report}
+【Market Environment Report】{macro_environment_report}
 【Debate History】{history}
 【Bull's Last Response】{current_response}
 

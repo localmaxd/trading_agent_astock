@@ -1,7 +1,11 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnableLambda
 from tradingagents.agents.utils.external_api_tools import tool_news_sentiment
 from tradingagents.agents.utils.agent_utils import (
+    REPORT_BUDGET_INSTRUCTION,
     build_instrument_context,
+    compact_tool_messages,
+    data_tool_done,
     get_language_instruction,
 )
 
@@ -17,17 +21,30 @@ def create_news_sentiment_analyst(llm, extra_tools=None):
     def news_sentiment_analyst_node(state):
         current_date = state["trade_date"]
         instrument_context = build_instrument_context(state["company_of_interest"])
-        tools = [tool_news_sentiment] + (extra_tools or [])
+
+        # The analyst runs in a parallel branch with its own message channel
+        messages = state.get("messages_news_sentiment", []) or []
+        prompt_messages = compact_tool_messages(messages)
+
+        # 数据只取一轮：tool_news_sentiment 执行过一次后不再绑定工具，
+        # 模型直接撰写报告（避免同一接口被反复调用/换日期重取）。
+        tools = (
+            []
+            if data_tool_done(messages, "tool_news_sentiment")
+            else [tool_news_sentiment] + (extra_tools or [])
+        )
 
         system_message = (
             "你是一位新闻舆情研究员，负责分析该股票的新闻、公告和市场情绪。\n"
             "请调用 `tool_news_sentiment` 获取该股票的舆情数据（含个股研报前2条、"
             "个股新闻前10条、公告大全、互动易问答等）。\n"
+            "数据只取一次：拿到结果后直接撰写报告，不要重复取数或尝试其他 end_date。\n"
             "ts_code格式如 600519.SH 或 300394.SZ，end_date为当前日期。\n"
             "从信息面边际变化、市场情绪方向、舆论热点三个维度分析。\n"
             "重点关注：正面/负面新闻占比、研报评级调整、公告重大事项。\n"
             "新闻核心看定量事实，而非定性结论，研报核心拆解逻辑，丢弃结论，情绪用来测温度"
             "报告末尾用Markdown表格整理关键舆情指标。"
+            + REPORT_BUDGET_INSTRUCTION
             + get_language_instruction(),
         )
 
@@ -48,10 +65,12 @@ def create_news_sentiment_analyst(llm, extra_tools=None):
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
 
-        # The analyst runs in a parallel branch with its own message channel
-        messages = state.get("messages_news_sentiment", []) or []
-        chain = prompt | llm.bind_tools(tools)
-        result = chain.invoke(messages)
+        if tools:
+            chain = prompt | llm.bind_tools(tools)
+        else:
+            # 数据已取：不再绑定工具，模型直接产出报告
+            chain = prompt | RunnableLambda(lambda msgs: llm.invoke(msgs))
+        result = chain.invoke(prompt_messages)
 
         report = ""
         if len(result.tool_calls) == 0:

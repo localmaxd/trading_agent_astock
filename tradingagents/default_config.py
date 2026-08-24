@@ -25,6 +25,13 @@ DEFAULT_CONFIG = {
     "checkpoint_enabled": False,
     "output_language": "Chinese",
 
+    # ========== Analyst context/token budgets ==========
+    # Tool responses stay intact in graph state, but only a bounded copy is
+    # sent back to the LLM on subsequent analyst/finalizer turns.
+    "analyst_tool_message_max_chars": 100000,
+    "analyst_claim_max_items": 12,
+    "verify_raw_tool_max_chars": 5000,
+
     # ========== Debate depth ==========
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,
@@ -39,14 +46,15 @@ DEFAULT_CONFIG = {
     "web_search_model": "deepseek-chat",
     "web_search_analysts": ["fundamentals", "technical", "game_theory"],
 
-    # ========== Fact verification (per-analyst fact-check guard) ==========
+    # ========== Fact verification (per-analyst code-only fact-check guard) ==========
     # After fundamentals / technical / game_theory output, a fact-checker
-    # node re-fetches cross-source data, verifies claims (facts + re-computed
-    # calculations), and feeds failures back to the analyst to redo its work.
+    # node resolves evidence JSON paths from the first retained tool response
+    # and verifies every claim deterministically (formula variables are also
+    # resolved by path and re-computed). No LLM is involved; failures feed the analyst back to
+    # redo its report with the SAME tool context (no new data request).
     "verify_enabled": True,
     "max_verify_rounds": 2,              # retries before marking as unverified
-    # Per-verification web-search budget (only used when web_search_enabled):
-    # how many queries per planning round, and how many planning rounds.
+    # 已停用（2026-08 校验改为纯代码，无 LLM 搜索规划）：
     "verify_search_max_queries": 4,
     "verify_search_max_rounds": 2,
 

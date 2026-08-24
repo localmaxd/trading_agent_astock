@@ -61,6 +61,7 @@ class MessageBuffer:
         "technical": "Technical Analyst (技术面)",
         "game_theory": "Game Theory Analyst (博弈面)",
         "news_sentiment": "News Sentiment Analyst (新闻舆情)",
+        "macro": "Macro Analyst (宏观环境)",
     }
 
     # Report section mapping: section -> (analyst_key for filtering, finalizing_agent)
@@ -69,6 +70,7 @@ class MessageBuffer:
         "technical_report": ("technical", "Technical Analyst (技术面)"),
         "game_theory_report": ("game_theory", "Game Theory Analyst (博弈面)"),
         "news_sentiment_report": ("news_sentiment", "News Sentiment Analyst (新闻舆情)"),
+        "macro_environment_report": ("macro", "Macro Analyst (宏观环境)"),
         "investment_plan": (None, "Research Manager"),
         "trader_investment_plan": (None, "Trader"),
         "final_trade_decision": (None, "Portfolio Manager"),
@@ -177,6 +179,7 @@ class MessageBuffer:
                 "technical_report": "技术面 (Technical)",
                 "game_theory_report": "博弈面 (Game Theory)",
                 "news_sentiment_report": "新闻舆情 (News & Sentiment)",
+                "macro_environment_report": "宏观环境 (Market Environment)",
                 "investment_plan": "Research Team Decision",
                 "trader_investment_plan": "Trading Team Plan",
                 "final_trade_decision": "Portfolio Management Decision",
@@ -192,12 +195,13 @@ class MessageBuffer:
         report_parts = []
 
         # Analyst Team Reports - use .get() to handle missing sections
-        analyst_sections = ["fundamentals_report", "technical_report", "game_theory_report", "news_sentiment_report"]
+        analyst_sections = ["fundamentals_report", "technical_report", "game_theory_report", "news_sentiment_report", "macro_environment_report"]
         section_labels = {
             "fundamentals_report": "基本面 (Fundamentals)",
             "technical_report": "技术面 (Technical)",
             "game_theory_report": "博弈面 (Game Theory)",
             "news_sentiment_report": "新闻舆情 (News & Sentiment)",
+            "macro_environment_report": "宏观环境 (Market Environment)",
         }
         if any(self.report_sections.get(section) for section in analyst_sections):
             report_parts.append("## Analyst Team Reports")
@@ -285,6 +289,7 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
             "Technical Analyst (技术面)",
             "Game Theory Analyst (博弈面)",
             "News Sentiment Analyst (新闻舆情)",
+            "Macro Analyst (宏观环境)",
         ],
         "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
         "Trading Team": ["Trader"],
@@ -560,7 +565,7 @@ def get_user_selections():
     )
     selected_research_depth = select_research_depth()
 
-    # Analysts team is fixed — 5 agents: 基本面/技术面/博弈面/风险面/新闻舆情
+    # Analysts team is fixed — 5 agents: 基本面/技术面/博弈面/新闻舆情/宏观环境
     selected_analysts = DEFAULT_ANALYSTS
 
     # LLM: DeepSeek API (2026-08: 切回官方 API；本地 8091 后端已停用)
@@ -625,6 +630,7 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
         ("technical_report", "technical.md", "Technical Analyst (技术面)"),
         ("game_theory_report", "game_theory.md", "Game Theory Analyst (博弈面)"),
         ("news_sentiment_report", "news_sentiment.md", "News Sentiment Analyst (新闻舆情)"),
+        ("macro_environment_report", "macro_environment.md", "Macro Analyst (宏观环境)"),
     ]
     analyst_parts = []
     for key, fname, label in analyst_reports:
@@ -709,6 +715,7 @@ def display_complete_report(final_state):
         ("technical_report", "Technical Analyst (技术面)"),
         ("game_theory_report", "Game Theory Analyst (博弈面)"),
         ("news_sentiment_report", "News Sentiment Analyst (新闻舆情)"),
+        ("macro_environment_report", "Macro Analyst (宏观环境)"),
     ]
     analysts = [(label, final_state[key]) for key, label in analyst_reports if final_state.get(key)]
     if analysts:
@@ -765,18 +772,20 @@ def update_research_team_status(status):
 
 
 # Ordered list of analysts for status transitions
-ANALYST_ORDER = ["fundamentals", "technical", "game_theory", "news_sentiment"]
+ANALYST_ORDER = ["fundamentals", "technical", "game_theory", "news_sentiment", "macro"]
 ANALYST_AGENT_NAMES = {
     "fundamentals": "Fundamentals Analyst (基本面)",
     "technical": "Technical Analyst (技术面)",
     "game_theory": "Game Theory Analyst (博弈面)",
     "news_sentiment": "News Sentiment Analyst (新闻舆情)",
+    "macro": "Macro Analyst (宏观环境)",
 }
 ANALYST_REPORT_MAP = {
     "fundamentals": "fundamentals_report",
     "technical": "technical_report",
     "game_theory": "game_theory_report",
     "news_sentiment": "news_sentiment_report",
+    "macro": "macro_environment_report",
 }
 
 

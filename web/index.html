@@ -24,8 +24,8 @@
   .badge.completed { background: #1e3a2b; color: var(--green); }
   .badge.failed { background: #46282a; color: var(--red); }
   main { display: grid; grid-template-columns: 250px 1fr 1.2fr; gap: 10px; padding: 10px 14px; height: calc(100vh - 58px); }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: auto; display: flex; flex-direction: column; }
-  .panel h2 { font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; padding: 9px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--panel); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+  .panel h2 { font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; padding: 9px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--panel); z-index: 2; }
   .panel .body { padding: 10px 12px; overflow-y: auto; flex: 1; }
   /* progress */
   .agent-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 2px; border-bottom: 1px dashed #222b36; }
@@ -41,13 +41,31 @@
   .act-line.error { color: var(--red); }
   .act-line.llm { color: var(--cyan); }
   .act-line.ticker { color: var(--accent); }
+  /* LLM 流式输出（实时打字效果） */
+  .llm-stream { margin: 4px 0; border: 1px solid #2c3b52; border-left: 3px solid #45d3ff; border-radius: 5px; padding: 4px 8px; background: #0f1722; }
+  .llm-stream .llm-stream-head { font-size: 11px; color: #7dd7ff; }
+  .llm-stream pre { margin: 3px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 11.5px; color: #cfe3ff; max-height: 220px; overflow-y: auto; }
+  .llm-stream.done { border-left-color: #4fae6f; }
+  .llm-stream.done .llm-stream-head { color: #7fce9b; }
   /* verification */
   .tabs { display: flex; border-bottom: 1px solid var(--border); }
-  .tabs button { flex: 1; background: none; border: none; color: var(--dim); padding: 8px; cursor: pointer; font-size: 13px; }
+  .tabs button { flex: 1; background: none; border: none; color: var(--dim); padding: 8px 2px; cursor: pointer; font-size: 13px; }
   .tabs button.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
   .verify-card { margin-bottom: 12px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   .verify-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #141b23; font-size: 12px; }
   .verify-head.pass { background: #17301f; } .verify-head.fail { background: #3a2322; }
+  .verify-head.pending { background: #1a2430; }
+  .verify-desc { padding: 6px 10px; font-size: 11.5px; color: var(--dim); line-height: 1.6; }
+  .verify-desc b { color: var(--text); }
+  .verify-list { margin: 2px 10px 8px; padding-left: 18px; font-size: 11.5px; color: #b9c4d4; line-height: 1.8; }
+  .verify-list li { list-style: none; }
+  .verify-tick { display: inline-block; width: 14px; color: #5f8f6f; }
+  /* 校验/重试节点流转动画状态（醒目色脉冲） */
+  g.st-verify-pass rect { stroke: #2f9e5b !important; fill: #14301f !important; stroke-width: 2.8; }
+  g.st-verify-fail rect { animation: vfail 0.9s ease-in-out 2; }
+  g.st-retry rect { animation: retrypulse 0.8s ease-in-out 2; }
+  @keyframes vfail { 0%,100% { stroke: var(--border); } 50% { stroke: #ff5252; fill: #4a1616; stroke-width: 3; } }
+  @keyframes retrypulse { 0%,100% { stroke: var(--border); } 50% { stroke: #ffb84d; fill: #4a2f0a; stroke-width: 3; } }
   table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
   th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #202932; vertical-align: top; }
   th { color: var(--dim); font-weight: 600; }
@@ -57,10 +75,72 @@
   /* report */
   .report-section { margin-bottom: 12px; border-left: 3px solid var(--accent); padding-left: 8px; }
   .report-section h3 { font-size: 12.5px; color: var(--accent); margin-bottom: 4px; }
+  .debate-block { margin: 6px 0; border: 1px solid #2c3b52; border-radius: 5px; padding: 5px 8px; background: #10161f; }
+  .debate-block b { color: #8fc7f5; font-size: 11.5px; }
+  .debate-block pre { margin: 3px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 11.5px; color: #b9c4d4; max-height: 260px; overflow-y: auto; }
   .report-section pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.55; color: #c9d3de; font-family: inherit; }
   .decision-box { border: 1px solid var(--green); background: #14271c; border-radius: 8px; padding: 10px; margin-top: 10px; }
   .decision-box h3 { color: var(--green); margin-bottom: 6px; }
   .empty { color: var(--dim); text-align: center; padding: 30px 10px; font-size: 12px; }
+  /* ---------- graph tab ---------- */
+  #graphBody { display: flex; flex-direction: column; padding: 0; }
+  .graph-toolbar { display: flex; align-items: center; gap: 12px; padding: 7px 10px; border-bottom: 1px solid var(--border); background: #131a22; flex-wrap: wrap; }
+  .graph-toolbar button { background: #1c2430; color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 2px 9px; font-size: 12px; cursor: pointer; }
+  .graph-toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+  .graph-breadcrumb { color: var(--accent); font-size: 11px; white-space: nowrap; }
+  .graph-legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--dim); align-items: center; }
+  .lg-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 3px; vertical-align: -1px; border: 1px solid #3b4a5f; background: #1b2434; }
+  .lg-dot.tool { background: #18202c; } .lg-dot.fc { background: #1f2b3f; border-color: #4a5f82; }
+  .lg-dot.subgraph { background: #142536; border-color: #4d7ca8; }
+  .lg-dot.retry { background: #18202c; }
+  .lg-dot.guard { background: #2a2412; border-color: #c9a13c; }
+  .lg-dot.run { background: #223a55; border-color: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+  .lg-dot.done { background: #14301f; border-color: #2f8f52; }
+  .lg-dot.flow { background: transparent; border-color: var(--accent); border-style: dashed; }
+  #graphSvgHost { flex: 1; overflow: auto; padding: 6px; }
+  #graphSvgHost svg { display: block; }
+  .graph-note { font-size: 11px; color: var(--dim); padding: 4px 10px 6px; }
+  /* svg styles */
+  .edge { stroke: #334155; stroke-width: 1.2; fill: none; }
+  .edge.cond { stroke: #41506b; stroke-dasharray: 5 4; }
+  .flow-path { fill: none; stroke: #ffd54a; stroke-width: 3; stroke-dasharray: 6 3; opacity: 1; filter: drop-shadow(0 0 5px rgba(255,213,74,.85)); }
+  .flow-dot { fill: #ffd54a; stroke: #fff3c4; stroke-width: 1.6; filter: drop-shadow(0 0 7px #ffb84d); }
+  g.node rect { fill: #1b2434; stroke: #3d4d66; stroke-width: 1; }
+  g.node.st-running rect { stroke: var(--accent); stroke-width: 2.2; animation: pulse 1.1s ease-in-out infinite; }
+  g.node.st-done rect { fill: #14301f; stroke: #2f8f52; }
+  g.node.st-llm rect { stroke: #eaf4ff; stroke-width: 2.4; }
+  g.tool rect, g.retry rect { fill: #18202c; stroke: #32405a; }
+  /* 工具/事实校验/重试 节点流转高亮（醒目色）：运行=橙/青脉冲，完成=绿 */
+  g.tool.st-running rect, g.retry.st-running rect { stroke: #ffb84d; stroke-width: 2.8; fill: #3a2a10; animation: pulse 1.1s ease-in-out infinite; }
+  g.tool.st-done rect, g.retry.st-done rect { fill: #12291a; stroke: #4fae6f; }
+  g.factchecker.st-running rect { stroke: #45d3ff; stroke-width: 2.8; fill: #0f2c3a; animation: pulse 1.1s ease-in-out infinite; }
+  g.factchecker.st-done rect { fill: #12291a; stroke: #4fae6f; }
+  g.node.st-running text, g.tool.st-running text, g.retry.st-running text, g.factchecker.st-running text { fill: #ffffff; font-weight: 700; }
+  g.subgraph-node rect { fill: #142536; stroke: #4d7ca8; stroke-width: 1.4; }
+  g.subgraph-node.st-running rect { stroke: var(--accent); stroke-width: 2.2; animation: pulse 1.1s ease-in-out infinite; }
+  g.subgraph-node.st-done rect { fill: #14301f; stroke: #2f8f52; }
+  g.analyst-subgraph rect.subgraph-rect { fill: #101923; stroke: #355779; stroke-width: 1.2; }
+  g.analyst-subgraph.st-running rect.subgraph-rect { stroke: var(--accent); stroke-width: 2; animation: pulse 1.1s ease-in-out infinite; }
+  g.analyst-subgraph.st-done rect.subgraph-rect { fill: #10251a; stroke: #2f8f52; }
+  .subgraph-title { fill: #8fc7f5; font-size: 10.5px; font-weight: 600; }
+  .subgraph-idx { fill: #698096; font-size: 9px; }
+  g.factchecker rect { fill: #1f2b3f; stroke: #4a5f82; }
+  g.guard rect { fill: #2a2412; stroke: #c9a13c; stroke-width: 1.2; }
+  g.guard.st-running rect { stroke: #ffd75e; stroke-width: 2.2; animation: pulse 1.1s ease-in-out infinite; }
+  g.guard.st-done rect { fill: #2a2412; stroke: #c9a13c; }
+  g.pseudo circle { fill: #0f1419; stroke: #8b98a8; stroke-width: 1.4; }
+  g.pseudo.st-running circle { stroke: var(--accent); stroke-width: 2.4; animation: pulse 1.1s ease-in-out infinite; }
+  g.pseudo.st-done circle { fill: #14301f; stroke: #2f8f52; }
+  g.stage rect.stage-rect { fill: #0e141b; stroke: #2a3340; stroke-width: 1.3; }
+  g.stage.st-running rect.stage-rect { stroke: var(--accent); stroke-width: 2; animation: pulse 1.1s ease-in-out infinite; }
+  g.stage.st-done rect.stage-rect { stroke: #2f8f52; }
+  g.stage.st-llm rect.stage-rect { stroke: #eaf4ff; stroke-width: 2.2; }
+  .node-text { fill: #c9d3de; font-size: 11px; }
+  .stage-title { fill: #aeb9c6; font-size: 12px; font-weight: 600; }
+  .stage-idx { fill: var(--dim); font-size: 10px; }
+  .pseudo-text { fill: #8b98a8; font-size: 10px; }
+  .guard-text { fill: #e6c34a; font-size: 11px; font-weight: 600; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 </style>
 </head>
 <body>
@@ -77,9 +157,13 @@
       <option value="technical" selected>技术面</option>
       <option value="game_theory" selected>博弈面</option>
       <option value="news_sentiment" selected>新闻舆情</option>
+      <option value="macro" selected>宏观环境</option>
     </select>
   </label>
   <button id="startBtn" onclick="startAnalysis()">开始分析</button>
+  <button id="pauseBtn" onclick="pauseAnalysis()" disabled>暂停</button>
+  <button id="resumeBtn" onclick="resumeAnalysis()" disabled>继续</button>
+  <button id="stopBtn" onclick="stopAnalysis()" disabled>停止</button>
   <span id="jobBadge" class="badge pending">未启动</span>
 </header>
 
@@ -92,14 +176,38 @@
     <div class="stats" id="currentNodeBox" style="margin-top:6px">当前节点: <b>--</b></div>
   </section>
 
-  <!-- 中：事实可观测性 -->
+  <!-- 中：图结构 + 事实可观测性 -->
   <section class="panel">
     <div class="tabs">
-      <button id="tabActivity" class="active" onclick="switchTab('activity')">活动流</button>
+      <button id="tabGraph" class="active" onclick="switchTab('graph')">图</button>
+      <button id="tabActivity" onclick="switchTab('activity')">活动流</button>
       <button id="tabVerify" onclick="switchTab('verify')">事实校验</button>
       <button id="tabNodeStats" onclick="switchTab('nodestats')">节点统计</button>
     </div>
-    <div class="body" id="activityBody" style="font-family: ui-monospace, Menlo, monospace;"></div>
+    <div class="body" id="graphBody">
+      <div class="graph-toolbar">
+        <div class="graph-legend">
+          <span><i class="lg-dot agent"></i>智能体</span>
+          <span><i class="lg-dot subgraph"></i>分析师子图</span>
+          <span><i class="lg-dot tool"></i>工具</span>
+          <span><i class="lg-dot fc"></i>事实校验</span>
+          <span><i class="lg-dot retry"></i>重试</span>
+          <span><i class="lg-dot guard"></i>标的校验</span>
+          <span><i class="lg-dot run"></i>运行中</span>
+          <span><i class="lg-dot done"></i>已完成</span>
+          <span><i class="lg-dot flow"></i>数据流动</span>
+        </div>
+        <span id="graphBreadcrumb" class="graph-breadcrumb">分析师子图已按所选分析师展开</span>
+        <span style="flex:1"></span>
+        <button onclick="graphZoomFit(true)">适应</button>
+        <button onclick="graphZoomIn()">+</button>
+        <button onclick="graphZoomOut()">−</button>
+        <button onclick="reloadGraph()">刷新图</button>
+      </div>
+      <div id="graphSvgHost"><div class="empty">图结构加载中...</div></div>
+      <div class="graph-note" id="graphNote">分析师团队大盒子内嵌每个真实 LangGraph 子图盒子；每个盒子封装自己的分析师、工具、事实校验和重试路径（宏观分析子图无事实校验/重试）。</div>
+    </div>
+    <div class="body" id="activityBody" style="display:none; font-family: ui-monospace, Menlo, monospace;"></div>
     <div class="body" id="verifyBody" style="display:none"></div>
     <div class="body" id="nodeStatsBody" style="display:none"></div>
   </section>
@@ -114,7 +222,7 @@
 <script>
 "use strict";
 var AGENTS = [
-  ["Analyst Team", ["Fundamentals Analyst (基本面)", "Technical Analyst (技术面)", "Game Theory Analyst (博弈面)", "News Sentiment Analyst (新闻舆情)"]],
+  ["Analyst Team", ["Fundamentals Analyst (基本面)", "Technical Analyst (技术面)", "Game Theory Analyst (博弈面)", "News Sentiment Analyst (新闻舆情)", "Macro Analyst (宏观环境)"]],
   ["Research Team", ["Bull Researcher", "Bear Researcher", "Research Manager"]],
   ["Trading Team", ["Trader"]],
   ["Risk Management", ["Aggressive Analyst", "Conservative Analyst", "Neutral Analyst"]],
@@ -126,6 +234,745 @@ var claimsMap = {};      // analyst -> claims
 var startTime = null;
 var timerId = null;
 
+/* ================= 图结构可视化 ================= */
+var NS = "http://www.w3.org/2000/svg";
+var GRAPH = null;        // /api/v1/graph payload
+var ACTIVE_GRAPH = null; // recursively serialized graph projected for display
+var LAYOUT = null;       // computed geometry
+var NODE_ELS = {};       // nodeKey -> <g>
+var GRAPH_NODE_STATES = {}; // full LangGraph path -> latest lifecycle state
+var lastCompleted = null;
+var graphZoom = 1;
+
+var NODE_LABELS = {
+  "__start__": "开始", "__end__": "结束",
+  "TickerGuard-Analyst Team": "标的校验 ①",
+  "TickerGuard-Research Debate": "标的校验 ②",
+  "TickerGuard-Trader": "标的校验 ③",
+  "TickerGuard-Risk Debate": "标的校验 ④",
+  "TickerGuard-Portfolio Manager": "标的校验 ⑤",
+  "Analyst Team": "分析师团队",
+  "Research Debate": "多空研究辩论",
+  "Trader": "交易员",
+  "Risk Debate": "风控团队辩论",
+  "Portfolio Manager": "投资组合经理",
+  "Fundamentals Analyst": "基本面分析师",
+  "Technical Analyst": "技术面分析师",
+  "Game_Theory Analyst": "博弈面分析师",
+  "News_Sentiment Analyst": "新闻舆情分析师",
+  "Macro Analyst": "宏观环境分析师",
+  "Analyze": "分析生成",
+  "tools_fundamentals": "工具·基本面",
+  "tools_technical": "工具·技术面",
+  "tools_game_theory": "工具·博弈面",
+  "tools_news_sentiment": "工具·新闻",
+  "tools_macro": "工具·宏观",
+  "FactChecker-Fundamentals": "事实校验·基本面",
+  "FactChecker-Technical": "事实校验·技术面",
+  "FactChecker-Game_Theory": "事实校验·博弈面",
+  "RetryClear-Fundamentals": "重试·基本面",
+  "RetryClear-Technical": "重试·技术面",
+  "RetryClear-Game_Theory": "重试·博弈面",
+  "Bull Researcher": "多方研究员",
+  "Bear Researcher": "空方研究员",
+  "Research Manager": "研究经理",
+  "Aggressive Analyst": "激进风控",
+  "Conservative Analyst": "保守风控",
+  "Neutral Analyst": "中性风控",
+};
+var STAGE_NAMES = {
+  "Analyst Team": "分析师团队",
+  "Research Debate": "多空研究辩论",
+  "Trader": "交易员",
+  "Risk Debate": "风控团队辩论",
+  "Portfolio Manager": "投资组合经理",
+};
+var TOOL_KEYS = {
+  "tool_fundamental": "tools_fundamentals",
+  "tool_technical": "tools_technical",
+  "tool_game_theory": "tools_game_theory",
+  "tool_news_sentiment": "tools_news_sentiment",
+  "tool_market_environment": "tools_macro",
+};
+var INNER_NODE_BRANCHES = {
+  "tools_fundamentals": "Fundamentals Analyst",
+  "tools_technical": "Technical Analyst",
+  "tools_game_theory": "Game_Theory Analyst",
+  "tools_news_sentiment": "News_Sentiment Analyst",
+  "tools_macro": "Macro Analyst",
+};
+
+function nodeKey(path) { return path.join("__"); }
+function pathOfStr(s) { return String(s || "").split("/").filter(function (x) { return x; }); }
+function labelOf(id) { return NODE_LABELS[id] || id; }
+
+function fetchGraph(analysts) {
+  return fetch("/api/v1/graph?analysts=" + encodeURIComponent(analysts.join(",")))
+    .then(function (r) { if (!r.ok) throw new Error("graph " + r.status); return r.json(); });
+}
+
+function loadGraph(analysts, silent) {
+  fetchGraph(analysts).then(function (g) {
+    GRAPH = g;
+    renderGraph();
+    if (!silent) addActivity("ticker", "图结构已加载: " + g.parent.nodes.length + " 父节点 / " + g.stages.length + " 阶段");
+  }).catch(function (err) {
+    document.getElementById("graphSvgHost").innerHTML =
+      '<div class="empty">图结构加载失败: ' + escapeHtml(err.message || err) + "</div>";
+    if (!silent) addActivity("error", "图结构加载失败: " + err);
+  });
+}
+
+function analystLaneLabel(analystId) {
+  return labelOf(analystId).replace(/分析师$/, "") + "子图";
+}
+
+function flattenNestedStage(stage) {
+  var nested = stage.nodes.filter(function (n) { return n.subgraph; });
+  if (!nested.length) return stage;
+
+  var nodes = stage.nodes.filter(function (n) {
+    return n.id === "__start__" || n.id === "__end__" || !n.subgraph;
+  });
+  var edges = [];
+  var groups = [];
+
+  nested.forEach(function (outer) {
+    var prefix = outer.id + "|";
+    var groupPath = [stage.id, outer.id];
+    var groupNodes = [];
+
+    outer.subgraph.nodes.forEach(function (child) {
+      if (child.id === "__start__" || child.id === "__end__") return;
+      var flatId = prefix + child.id;
+      var childPath = groupPath.concat([child.id]);
+      groupNodes.push(flatId);
+      nodes.push({
+        id: flatId,
+        kind: child.kind,
+        label: child.id === "Analyze" ? labelOf(outer.id) : labelOf(child.id),
+        path: childPath,
+        group: outer.id,
+      });
+    });
+
+    outer.subgraph.edges.forEach(function (edge) {
+      var fromStart = edge.source === "__start__";
+      var toEnd = edge.target === "__end__";
+      edges.push({
+        source: fromStart ? "__start__" : prefix + edge.source,
+        target: toEnd ? "__end__" : prefix + edge.target,
+        conditional: !!edge.conditional,
+        source_path: fromStart ? [stage.id, "__start__"] : groupPath.concat([edge.source]),
+        target_path: toEnd ? [stage.id, "__end__"] : groupPath.concat([edge.target]),
+      });
+    });
+    groups.push({
+      id: outer.id,
+      label: analystLaneLabel(outer.id),
+      nodeIds: groupNodes,
+      path: groupPath,
+    });
+  });
+  return {id: stage.id, nodes: nodes, edges: edges, groups: groups};
+}
+
+function graphForCurrentView() {
+  return {
+    parent: GRAPH.parent,
+    stages: GRAPH.stages.map(flattenNestedStage),
+  };
+}
+
+function reloadGraph() {
+  var sel = document.getElementById("analysts");
+  var analysts = Array.from(sel.selectedOptions).map(function (o) { return o.value; });
+  loadGraph(analysts.length ? analysts : ["fundamentals", "technical", "game_theory", "news_sentiment", "macro"], false);
+}
+
+/* -------- layout -------- */
+function layoutStage(st) {
+  var NW = 96, NH = 22, TOOLW = 80, SUBW = 92, CX = 12, CY = 54, PAD = 9, HEADER = 21;
+  var rowStep = NH + CY;
+  var groupTopExtra = st.groups && st.groups.length ? 18 : 0;
+  var groupBottomExtra = st.groups && st.groups.length ? 28 : 0;
+  var kinds = {};
+  var nodesById = {};
+  st.nodes.forEach(function (n) { kinds[n.id] = n.kind; nodesById[n.id] = n; });
+  var real = st.nodes.filter(function (n) { return n.id !== "__start__" && n.id !== "__end__"; })
+                     .map(function (n) { return n.id; });
+  // 1) DFS back-edge detection: an edge returning to a node still on the
+  //    recursion stack is a cycle edge (tool-call / retry return wires).
+  var adj = {};
+  st.edges.forEach(function (e) { (adj[e.source] = adj[e.source] || []).push(e.target); });
+  var back = {}, visited = {}, onStack = {};
+  function dfs(id) {
+    visited[id] = true; onStack[id] = true;
+    (adj[id] || []).forEach(function (t) {
+      if (onStack[t]) back[id + "|" + t] = true;
+      else if (!visited[t]) dfs(t);
+    });
+    onStack[id] = false;
+  }
+  st.nodes.forEach(function (n) { if (!visited[n.id]) dfs(n.id); });
+  // 2) longest-path layering ignoring back edges. Fact-checker / retry
+  //    targets get +1/+2 edge weight so the analyst tool loop reads as
+  //    analyst -> tools -> factchecker -> retry (4 columns) instead of all
+  //    of them piling into a single layer.
+  var layer = {};
+  real.forEach(function (id) { layer[id] = 0; });
+  for (var i = 0; i <= real.length; i++) {
+    st.edges.forEach(function (e) {
+      if (back[e.source + "|" + e.target]) return;
+      if (layer[e.source] === undefined || layer[e.target] === undefined) return;
+      if (e.source === "__start__" || e.target === "__end__") return;
+      var w = 1 + (kinds[e.target] === "factchecker" ? 1 : kinds[e.target] === "retry" ? 2 : 0);
+      if (layer[e.target] < layer[e.source] + w) layer[e.target] = layer[e.source] + w;
+    });
+  }
+  // 3) columns = distinct layers ranked 0..n-1 (empty layers merge)
+  var cols = {}, colKeys = [];
+  real.forEach(function (id) {
+    var l = layer[id];
+    if (!cols[l]) { cols[l] = []; colKeys.push(l); }
+    cols[l].push(id);
+  });
+  colKeys.sort(function (a, b) { return a - b; });
+  var colIndex = {}, rank = 0;
+  colKeys.forEach(function (c) { colIndex[c] = rank++; });
+  var colW = {}, colX = {}, x = 0;
+  colKeys.forEach(function (c) {
+    colW[c] = Math.max.apply(null, cols[c].map(function (id) {
+      return kinds[id] === "subgraph" ? SUBW :
+        (kinds[id] === "tool" || kinds[id] === "retry") ? TOOLW : NW;
+    })) + CX;
+    colX[colIndex[c]] = x;
+    x += colW[c];
+  });
+  var nRows = 1;
+  colKeys.forEach(function (c) { nRows = Math.max(nRows, cols[c].length); });
+  var nBack = 0;
+  st.edges.forEach(function (e) {
+    if (!back[e.source + "|" + e.target]) return;
+    var sourceGroup = nodesById[e.source] && nodesById[e.source].group;
+    var targetGroup = nodesById[e.target] && nodesById[e.target].group;
+    // Analyst return loops are routed on a private bus inside their nested
+    // subgraph box, so they do not consume the parent stage's shared bus.
+    if (!sourceGroup || sourceGroup !== targetGroup) nBack++;
+  });
+  var busH = nBack ? 12 + 7 * nBack + 12 : 0;
+  var w = PAD * 2 + x + 26;  // +26: start/end circles
+  var h = HEADER + PAD * 2 + groupTopExtra + groupBottomExtra +
+    nRows * NH + (nRows - 1) * CY + busH;
+  return { cols: cols, colKeys: colKeys, colW: colW, colX: colX, layer: layer,
+           nRows: nRows, nBack: nBack, w: w, h: h, kinds: kinds,
+           nodesById: nodesById, rowStep: rowStep,
+           groupTopExtra: groupTopExtra, groupBottomExtra: groupBottomExtra };
+}
+
+function buildLayout(g) {
+  var GW = 96, GH = 24, R = 7, GAP = 22;
+  var L = {
+    w: 0, h: 0,
+    parent: {}, stage: {}, inner: {},
+    startCir: {}, endCir: {},
+    parentEdges: [], stageEdges: {}, stageOrder: [], stageNodeBoxes: {},
+    groups: [], groupByKey: {},
+  };
+  // parent chain order (linear: __start__ -> guards -> stages -> __end__)
+  var bySource = {};
+  g.parent.edges.forEach(function (e) { (bySource[e.source] = bySource[e.source] || []).push(e.target); });
+  var order = [], cur = "__start__";
+  for (var guard = 0; guard < 60 && cur; guard++) {
+    order.push(cur);
+    var nexts = bySource[cur] || [];
+    if (!nexts.length) break;
+    cur = nexts[0];
+  }
+  g.parent.nodes.forEach(function (n) { if (order.indexOf(n.id) < 0) order.push(n.id); });
+  var nodeById = {};
+  g.parent.nodes.forEach(function (n) { nodeById[n.id] = n; });
+
+  var SL = {};
+  var stageById = {};
+  g.stages.forEach(function (st) { SL[st.id] = layoutStage(st); stageById[st.id] = st; });
+
+  var maxW = 40;
+  order.forEach(function (id) {
+    var n = nodeById[id];
+    if (!n) return;
+    if (n.kind === "guard") maxW = Math.max(maxW, GW);
+    else if (n.kind === "stage") maxW = Math.max(maxW, SL[id].w);
+  });
+  L.w = maxW + 40;
+  var cx = L.w / 2, y = 16;
+  order.forEach(function (id) {
+    var n = nodeById[id];
+    if (!n) return;
+    if (n.kind === "pseudo") {
+      L.parent[id] = { x: cx - R, y: y - R, w: 2 * R, h: 2 * R, cx: cx, cy: y, kind: "pseudo" };
+      y += 2 * R + 14;
+    } else if (n.kind === "guard") {
+      L.parent[id] = { x: cx - GW / 2, y: y, w: GW, h: GH, cx: cx, cy: y + GH / 2, kind: "guard" };
+      y += GH + GAP;
+    } else {
+      var sl = SL[id], bx = cx - sl.w / 2, by = y;
+      L.stage[id] = { x: bx, y: by, w: sl.w, h: sl.h, cx: cx, cy: by + sl.h / 2 };
+      L.stageNodeBoxes[id] = {};
+      var innerY = by + 21 + 9 + sl.groupTopExtra;
+      sl.colKeys.forEach(function (c, rank) {
+        var colX = bx + 9 + sl.colX[rank];
+        sl.cols[c].forEach(function (nid, r) {
+          var iw = sl.kinds[nid] === "subgraph" ? 120 :
+            (sl.kinds[nid] === "tool" || sl.kinds[nid] === "retry") ? 80 : 96;
+          var nodeData = sl.nodesById[nid];
+          var rawPath = nodeData.path || [id, nid];
+          var rawKey = nodeKey(rawPath);
+          var nodeBox = {
+            x: colX + (sl.colW[c] - iw) / 2, y: innerY + r * sl.rowStep,
+            w: iw, h: 22, cx: colX + sl.colW[c] / 2, cy: innerY + r * sl.rowStep + 11,
+            kind: sl.kinds[nid], stage: id, id: nid,
+            label: nodeData.label, path: rawPath, group: nodeData.group,
+          };
+          L.inner[rawKey] = nodeBox;
+          L.stageNodeBoxes[id][nid] = nodeBox;
+        });
+      });
+      L.startCir[id] = { x: bx - 13, y: innerY + 11 - 6, w: 12, h: 12, cx: bx - 7, cy: innerY + 11, r: 6, pseudo: true };
+      L.endCir[id] = { x: bx + sl.w + 13, y: innerY + (sl.nRows - 1) * sl.rowStep + 11 - 6, w: 12, h: 12, cx: bx + sl.w + 19, cy: innerY + (sl.nRows - 1) * sl.rowStep + 11, r: 6, pseudo: true };
+      var stageGroups = stageById[id].groups || [];
+      stageGroups.forEach(function (group, groupIndex) {
+        var boxes = group.nodeIds.map(function (nid) { return L.stageNodeBoxes[id][nid]; }).filter(Boolean);
+        if (!boxes.length) return;
+        var minX = Math.min.apply(null, boxes.map(function (b) { return b.x; })) - 7;
+        var maxX = Math.max.apply(null, boxes.map(function (b) { return b.x + b.w; })) + 7;
+        var minY = Math.min.apply(null, boxes.map(function (b) { return b.y; })) - 20;
+        var localBackCount = stageById[id].edges.filter(function (edge) {
+          var source = L.stageNodeBoxes[id][edge.source];
+          var target = L.stageNodeBoxes[id][edge.target];
+          return source && target && source.group === group.id && target.group === group.id &&
+            target.cx <= source.cx;
+        }).length;
+        var localBusHeight = localBackCount ? 10 + 7 * localBackCount : 0;
+        var maxY = Math.max.apply(null, boxes.map(function (b) { return b.y + b.h; })) +
+          7 + localBusHeight;
+        var groupKey = nodeKey(group.path);
+        var groupBox = {
+          key: groupKey, stage: id, x:minX, y:minY, w:maxX-minX, h:maxY-minY,
+          cx:(minX+maxX)/2, cy:(minY+maxY)/2, label:group.label,
+          index:groupIndex + 1, total:stageGroups.length,
+          localBackCount:localBackCount,
+        };
+        L.groups.push(groupBox);
+        L.groupByKey[groupKey] = groupBox;
+      });
+      y += sl.h + GAP;
+    }
+  });
+  L.h = y + 8;
+  order.forEach(function (id) {
+    var n = nodeById[id];
+    if (n && n.kind === "stage") L.stageOrder.push(id);
+  });
+  // parent edge geometry: straight vertical lines (everything centered)
+  g.parent.edges.forEach(function (e) {
+    var a = L.parent[e.source] || L.stage[e.source];
+    var b = L.parent[e.target] || L.stage[e.target];
+    if (!a || !b) return;
+    L.parentEdges.push({ s: e.source, t: e.target, cond: !!e.conditional, x1: a.cx, y1: a.y + a.h, x2: b.cx, y2: b.y });
+  });
+  // stage edge geometry
+  g.stages.forEach(function (st) {
+    L.stageEdges[st.id] = [];
+    var sc = L.startCir[st.id], ec = L.endCir[st.id];
+    st.edges.forEach(function (e) {
+      var a, b;
+      if (e.source === "__start__") a = sc;
+      else if (e.source === "__end__") a = ec;
+      else a = L.stageNodeBoxes[st.id][e.source];
+      if (e.target === "__start__") b = sc;
+      else if (e.target === "__end__") b = ec;
+      else b = L.stageNodeBoxes[st.id][e.target];
+      if (!a || !b) return;
+      var back = !a.pseudo && !b.pseudo && b.cx <= a.cx;
+      L.stageEdges[st.id].push({ s: e.source, t: e.target, cond: !!e.conditional, back: back, a: a, b: b });
+    });
+  });
+  return L;
+}
+
+/* -------- drawing -------- */
+function mkEl(tag, attrs) {
+  var el = document.createElementNS(NS, tag);
+  for (var k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function mkG(svg, cls, key) {
+  var g = mkEl("g", { "class": cls, "data-state": "idle", "data-key": key });
+  svg.appendChild(g);
+  NODE_ELS[key] = g;
+  return g;
+}
+
+function drawEdges(svg, L) {
+  var defs = mkEl("defs", {});
+  defs.innerHTML = '<marker id="garr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4a5b78"/></marker>';
+  svg.appendChild(defs);
+  L.parentEdges.forEach(function (e) {
+    var p = mkEl("path", { d: "M " + e.x1 + " " + e.y1 + " L " + e.x2 + " " + e.y2, "class": e.cond ? "edge cond" : "edge", "marker-end": "url(#garr)" });
+    svg.appendChild(p);
+  });
+  L.stageOrder.forEach(function (sid) {
+    var st = L.stage[sid], busTop = st.y + st.h - 12;
+    var backIdx = 0;
+    var localBackIndices = {};
+    L.stageEdges[sid].forEach(function (e) {
+      var a = e.a, b = e.b, d;
+      if (e.back) {
+        // Analyst return wires use a private bus inside their enclosing
+        // subgraph box. Other cyclic stages keep the shared stage-level bus.
+        var upX = (b.cx - b.w / 2) - 3;             // gap before the target column
+        var busY;
+        if (a.group && a.group === b.group) {
+          var groupKey = nodeKey([sid, a.group]);
+          var groupBox = L.groupByKey[groupKey];
+          var localIndex = localBackIndices[groupKey] || 0;
+          localBackIndices[groupKey] = localIndex + 1;
+          busY = groupBox.y + groupBox.h - 6 - 7 * localIndex;
+        } else {
+          busY = busTop - 7 * backIdx;
+          backIdx++;
+        }
+        d = "M " + a.cx + " " + (a.y + a.h) +
+            " L " + a.cx + " " + busY +
+            " L " + upX + " " + busY +
+            " L " + upX + " " + (b.y + b.h) +
+            " L " + b.cx + " " + (b.y + b.h);
+      } else if (a.pseudo || b.pseudo) {
+        var x1 = a.x + a.w, y1 = a.cy, x2 = b.x, y2 = b.cy;
+        d = "M " + x1 + " " + y1 + " C " + (x1 + 18) + " " + y1 + ", " + (x2 - 18) + " " + y2 + ", " + x2 + " " + y2;
+      } else {
+        d = "M " + (a.x + a.w) + " " + a.cy + " L " + b.x + " " + b.cy;
+      }
+      var p = mkEl("path", { d: d, "class": e.cond ? "edge cond" : "edge", "marker-end": "url(#garr)" });
+      svg.appendChild(p);
+    });
+  });
+}
+
+function drawAnalystGroups(svg, L, stageId) {
+  L.groups.filter(function (group) { return group.stage === stageId; }).forEach(function (group) {
+    var container = mkG(svg, "analyst-subgraph st-idle", group.key);
+    container.appendChild(mkEl("rect", {
+      x: group.x, y: group.y, width: group.w, height: group.h,
+      rx: 7, "class": "subgraph-rect",
+    }));
+    container.appendChild(mkEl("text", {
+      x: group.x + 8, y: group.y + 14, "class": "subgraph-title",
+    })).textContent = group.label;
+    container.appendChild(mkEl("text", {
+      x: group.x + group.w - 8, y: group.y + 14,
+      "text-anchor": "end", "class": "subgraph-idx",
+    })).textContent = "子图 " + group.index + "/" + group.total;
+    container.appendChild(mkEl("title", {})).textContent =
+      group.label + " · 独立编译的 LangGraph 子图";
+  });
+}
+
+function drawNodes(svg, L) {
+  // parent pseudo (START / END)
+  Object.keys(L.parent).forEach(function (id) {
+    var b = L.parent[id];
+    if (b.kind !== "pseudo") return;
+    var g = mkG(svg, "pseudo st-idle", id);
+    g.appendChild(mkEl("circle", { cx: b.cx, cy: b.cy, r: b.w / 2 }));
+    g.appendChild(mkEl("text", { x: b.cx, y: b.cy + (id === "__start__" ? -11 : 20), "text-anchor": "middle", "class": "pseudo-text" }))
+     .textContent = labelOf(id);
+  });
+  // guards
+  Object.keys(L.parent).forEach(function (id) {
+    var b = L.parent[id];
+    if (b.kind !== "guard") return;
+    var g = mkG(svg, "guard st-idle", id);
+    g.appendChild(mkEl("rect", { x: b.x, y: b.y, width: b.w, height: b.h, rx: 6 }));
+    g.appendChild(mkEl("text", { x: b.cx, y: b.cy + 4, "text-anchor": "middle", "class": "guard-text" }))
+     .textContent = labelOf(id);
+    g.appendChild(mkEl("title", {})).textContent = id + " · 进入阶段前校验标的代码";
+  });
+  // stages
+  L.stageOrder.forEach(function (sid, idx) {
+    var b = L.stage[sid];
+    var stageData = ACTIVE_GRAPH.stages.find(function (s) { return s.id === sid; });
+    var g = mkG(svg, "stage st-idle", sid);
+    g.appendChild(mkEl("rect", { x: b.x, y: b.y, width: b.w, height: b.h, rx: 9, "class": "stage-rect" }));
+    var t = mkEl("text", { x: b.x + 12, y: b.y + 15, "class": "stage-title" });
+    t.textContent = (idx + 1) + ". " + ((stageData && stageData.label) || STAGE_NAMES[sid] || sid);
+    g.appendChild(t);
+    g.appendChild(mkEl("text", { x: b.x + b.w - 12, y: b.y + 15, "text-anchor": "end", "class": "stage-idx" }))
+     .textContent = "阶段 " + (idx + 1) + "/" + L.stageOrder.length;
+    g.appendChild(mkEl("title", {})).textContent = sid;
+    // start / end circles of the stage
+    var sc = L.startCir[sid], ec = L.endCir[sid];
+    var gs = mkG(svg, "pseudo st-idle", sid + "__start");
+    gs.appendChild(mkEl("circle", { cx: sc.cx, cy: sc.cy, r: sc.r }));
+    gs.appendChild(mkEl("title", {})).textContent = "阶段入口";
+    var ge = mkG(svg, "pseudo st-idle", sid + "__end");
+    ge.appendChild(mkEl("circle", { cx: ec.cx, cy: ec.cy, r: ec.r }));
+    ge.appendChild(mkEl("title", {})).textContent = "阶段出口";
+    // Nested analyst-subgraph containers sit above the stage background and
+    // below their internal nodes/edges, matching the visual hierarchy of the
+    // five top-level stage boxes.
+    drawAnalystGroups(svg, L, sid);
+    // internal nodes
+    Object.keys(L.inner).forEach(function (key) {
+      var box = L.inner[key];
+      if (box.stage !== sid) return;
+      var nid = box.id;
+      var cls = box.kind === "subgraph" ? "subgraph-node" :
+        box.kind === "tool" || box.kind === "retry" ? box.kind :
+        box.kind === "factchecker" ? "factchecker" : "node";
+      var ng = mkG(svg, cls + " st-idle", key);
+      ng.appendChild(mkEl("rect", { x: box.x, y: box.y, width: box.w, height: box.h, rx: 5 }));
+      ng.appendChild(mkEl("text", { x: box.cx, y: box.cy + 4, "text-anchor": "middle", "class": "node-text" }))
+       .textContent = box.label || labelOf(nid);
+      var nodeData = stageData && stageData.nodes.find(function (n) { return n.id === nid; });
+      var childIds = nodeData && nodeData.subgraph ? nodeData.subgraph.nodes
+        .filter(function (n) { return n.id !== "__start__" && n.id !== "__end__"; })
+        .map(function (n) { return labelOf(n.id); }) : [];
+      ng.appendChild(mkEl("title", {})).textContent = box.label || nid;
+    });
+  });
+}
+
+function renderGraph() {
+  var host = document.getElementById("graphSvgHost");
+  NODE_ELS = {};
+  lastCompleted = null;
+  if (!GRAPH) { host.innerHTML = '<div class="empty">图结构未加载</div>'; return; }
+  ACTIVE_GRAPH = graphForCurrentView();
+  var L = buildLayout(ACTIVE_GRAPH);
+  LAYOUT = L;
+  var svg = mkEl("svg", { width: L.w, height: L.h, viewBox: "0 0 " + L.w + " " + L.h });
+  drawNodes(svg, L);
+  // Draw static paths after the container backgrounds so they remain visible.
+  // Edge endpoints are calculated at node boundaries, so paths do not cross
+  // node labels even though they are painted above the node groups.
+  drawEdges(svg, L);
+  Object.keys(GRAPH_NODE_STATES).forEach(function (key) {
+    var el = NODE_ELS[key];
+    if (!el) return;
+    el.setAttribute("data-state", GRAPH_NODE_STATES[key]);
+    el.classList.remove("st-idle", "st-running", "st-done");
+    el.classList.add("st-" + GRAPH_NODE_STATES[key]);
+  });
+  host.innerHTML = "";
+  host.appendChild(svg);
+  applyGraphZoom();
+  graphZoomFit();
+  // The four expanded analyst lanes are intentionally wide. Keep labels
+  // readable and let the graph host scroll horizontally when necessary.
+  if (graphZoom < 0.55) {
+    graphZoom = 0.55;
+    applyGraphZoom();
+  }
+}
+
+/* -------- states & flow animation -------- */
+function setNodeState(path, state) {
+  if (!path || !path.length || !NODE_ELS) return;
+  var key = nodeKey(path);
+  GRAPH_NODE_STATES[key] = state;
+  var el = NODE_ELS[key];
+  if (!el) return;
+  el.setAttribute("data-state", state);
+  el.classList.remove("st-idle", "st-running", "st-done");
+  el.classList.add("st-" + state);
+  if (path.length >= 2) { // keep the nearest visible subgraph/stage container active
+    var parentKey = nodeKey(path.slice(0, -1));
+    var cont = NODE_ELS[parentKey];
+    if (cont && cont.getAttribute("data-state") !== "done") {
+      var cs = state === "done" ? "running" : state;
+      cont.setAttribute("data-state", cs);
+      cont.classList.remove("st-idle", "st-running", "st-done");
+      cont.classList.add("st-" + cs);
+    }
+  }
+}
+
+function renderedPath(path) {
+  // Resolve a streamed nested LangGraph path to its exact visible node, with
+  // the enclosing analyst-subgraph box as the natural parent fallback.
+  var visible = (path || []).slice();
+  while (visible.length && !NODE_ELS[nodeKey(visible)]) visible.pop();
+  return visible;
+}
+
+function boxOf(path) {
+  if (!path || !path.length) return null;
+  var key = nodeKey(path);
+  if (LAYOUT.stage[key]) return LAYOUT.stage[key];
+  if (LAYOUT.groupByKey[key]) return LAYOUT.groupByKey[key];
+  if (LAYOUT.inner[key]) return LAYOUT.inner[key];
+  if (path.length === 1) {
+    if (LAYOUT.parent[path[0]]) return LAYOUT.parent[path[0]];
+    if (LAYOUT.stage[path[0]]) return LAYOUT.stage[path[0]];
+    return null;
+  }
+  return null;
+}
+
+function findEdge(fromPath, toPath) {
+  if (!ACTIVE_GRAPH) return null;
+  var fromKey = nodeKey(fromPath), toKey = nodeKey(toPath);
+  var parentEdge = ACTIVE_GRAPH.parent.edges.find(function (e) {
+    return e.source === fromKey && e.target === toKey;
+  });
+  if (parentEdge) return parentEdge;
+  var result = null;
+  ACTIVE_GRAPH.stages.some(function (st) {
+    result = st.edges.find(function (e) {
+      var sourcePath = e.source_path || [st.id, e.source];
+      var targetPath = e.target_path || [st.id, e.target];
+      return nodeKey(sourcePath) === fromKey && nodeKey(targetPath) === toKey;
+    }) || null;
+    return !!result;
+  });
+  return result;
+}
+
+function flowPoints(fromPath, toPath) {
+  var a = boxOf(fromPath), b = boxOf(toPath);
+  if (!a || !b) return null;
+  var edge = findEdge(fromPath, toPath);
+  if (edge) return { x1: a.x + a.w, y1: a.cy, x2: b.x, y2: b.cy };
+  var sameParent = fromPath.length === toPath.length && fromPath.length > 1 &&
+    nodeKey(fromPath.slice(0, -1)) === nodeKey(toPath.slice(0, -1));
+  if (sameParent) return null; // independent parallel nodes without a direct edge
+  if (toPath.length === fromPath.length + 1 &&
+      nodeKey(toPath.slice(0, -1)) === nodeKey(fromPath)) {
+    // stage entry: particle enters from the container's left border at that row
+    return { x1: a.x, y1: b.cy, x2: b.x, y2: b.cy };
+  }
+  if (fromPath.length === toPath.length + 1 &&
+      nodeKey(fromPath.slice(0, -1)) === nodeKey(toPath)) {
+    // stage exit: particle leaves via the container's right border at that row
+    return { x1: a.x + a.w, y1: a.cy, x2: a.x + a.w + 26, y2: a.cy };
+  }
+  return { x1: a.x + a.w, y1: a.cy, x2: b.x, y2: b.cy };
+}
+
+function animateFlow(fromPath, toPath) {
+  if (nodeKey(fromPath || []) === nodeKey(toPath || [])) return false;
+  var pts = flowPoints(fromPath, toPath);
+  if (!pts) return false;
+  var svg = document.querySelector("#graphSvgHost svg");
+  if (!svg) return false;
+  var midX = (pts.x1 + pts.x2) / 2;
+  var d = "M " + pts.x1 + " " + pts.y1 + " C " + midX + " " + pts.y1 + ", " + midX + " " + pts.y2 + ", " + pts.x2 + " " + pts.y2;
+  var pathEl = mkEl("path", { d: d, "class": "flow-path" });
+  svg.appendChild(pathEl);
+  var dot = mkEl("circle", { r: 6, "class": "flow-dot" });
+  var am = mkEl("animateMotion", { dur: "0.7s", begin: "0s", fill: "freeze", path: d });
+  dot.appendChild(am);
+  svg.appendChild(dot);
+  window.setTimeout(function () { pathEl.remove(); dot.remove(); }, 900);
+  return true;
+}
+
+function flashNode(pathStr) {
+  var path = pathOfStr(pathStr);
+  if (path.length === 1 && INNER_NODE_BRANCHES[path[0]]) {
+    path = ["Analyst Team", INNER_NODE_BRANCHES[path[0]], path[0]];
+  }
+  path = renderedPath(path);
+  if (!path.length) return;
+  var el = NODE_ELS[nodeKey(path)];
+  if (!el) return;
+  el.classList.add("st-llm");
+  window.setTimeout(function () { el.classList.remove("st-llm"); }, 700);
+}
+
+function ensureVisible(path) {
+  path = renderedPath(path);
+  var el = NODE_ELS[nodeKey(path)];
+  if (!el) return;
+  var host = document.getElementById("graphSvgHost");
+  var hr = host.getBoundingClientRect(), er = el.getBoundingClientRect();
+  if (er.top < hr.top || er.bottom > hr.bottom || er.left < hr.left || er.right > hr.right) {
+    el.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+}
+
+function updateCurrentNodeBox(text, status) {
+  var box = document.getElementById("currentNodeBox");
+  box.innerHTML = "当前节点: <b>" + escapeHtml(text) + "</b> <span class='status " +
+    (status === "运行中" ? "in_progress" : "completed") + "'>" + status + "</span>";
+}
+
+function onNodeStarted(ev) {
+  var rawPath = ev.path || pathOfStr(ev.node);
+  GRAPH_NODE_STATES[nodeKey(rawPath)] = "running";
+  var path = renderedPath(rawPath);
+  if (!path.length) return;
+  // 分支内流转：每个分析师子图用自己上一次完成的节点作为动画起点，
+  // 保证 工具→事实校验→重试 的连线在同一分支内正确动画（并行分支互不串线）
+  var branch = branchOfPath(path);
+  var from = (branch && lastByBranch[branch]) || lastCompleted;
+  if (from) {
+    if (animateFlow(from, path)) ensureVisible(path);
+  }
+  setNodeState(path, "running");
+  updateCurrentNodeBox(ev.node, "运行中");
+}
+
+function branchOfPath(path) {
+  return path && path.length >= 2 ? nodeKey(path.slice(0, 2)) : null;
+}
+
+function onNodeCompleted(ev) {
+  var rawPath = ev.path || pathOfStr(ev.node);
+  GRAPH_NODE_STATES[nodeKey(rawPath)] = "done";
+  var path = renderedPath(rawPath);
+  if (!path.length) return;
+  setNodeState(path, "done");
+  lastCompleted = path;
+  var branch = branchOfPath(path);
+  if (branch) lastByBranch[branch] = path;
+  if (ev.node_stats) renderNodeStats(ev.node_stats);
+  updateCurrentNodeBox(ev.node, "完成" + (ev.duration != null ? " (" + ev.duration + "s)" : ""));
+}
+
+function resetGraphStates() {
+  GRAPH_NODE_STATES = {};
+  lastByBranch = {};
+  Object.keys(NODE_ELS).forEach(function (k) {
+    var el = NODE_ELS[k];
+    el.setAttribute("data-state", "idle");
+    el.classList.remove("st-running", "st-done", "st-llm");
+    el.classList.add("st-idle");
+  });
+  lastCompleted = null;
+}
+
+/* -------- zoom -------- */
+function applyGraphZoom() {
+  var svg = document.querySelector("#graphSvgHost svg");
+  if (!svg || !LAYOUT) return;
+  svg.style.width = Math.round(LAYOUT.w * graphZoom) + "px";
+  svg.style.height = Math.round(LAYOUT.h * graphZoom) + "px";
+}
+function graphZoomFit(forceFullFit) {
+  var host = document.getElementById("graphSvgHost");
+  if (!LAYOUT || !host.clientWidth) return;
+  var fitted = Math.min(1, (host.clientWidth - 10) / LAYOUT.w);
+  graphZoom = forceFullFit ? fitted : Math.max(0.55, fitted);
+  applyGraphZoom();
+}
+function graphZoomIn() { graphZoom = Math.min(3, graphZoom * 1.25); applyGraphZoom(); }
+function graphZoomOut() { graphZoom = Math.max(0.2, graphZoom / 1.25); applyGraphZoom(); }
+
+/* ================= 原有功能 ================= */
 function initAgents() {
   var html = "";
   AGENTS.forEach(function (team) {
@@ -151,6 +998,7 @@ function markAnalystCompleted(reportKey) {
     "technical_report": "Technical Analyst (技术面)",
     "game_theory_report": "Game Theory Analyst (博弈面)",
     "news_sentiment_report": "News Sentiment Analyst (新闻舆情)",
+    "macro_environment_report": "Macro Analyst (宏观环境)",
   };
   if (map[reportKey]) setAgent(map[reportKey], "completed");
 }
@@ -193,43 +1041,167 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// 参与代码事实校验的 3 个分析师子图（宏观/新闻舆情子图无事实校验）。
+// 面板始终为每个子图渲染一张卡片：未完成时显示**具体检查项清单**，
+// 完成后显示逐项结果（通过/未通过 + 失败原因）。
+var VERIFY_SUBGRAPHS = {
+  fundamentals: {
+    label: "基本面子图",
+    scope: "数据接口：tool_fundamental",
+    items: [
+      "盈利能力：ROIC（EBIT ÷ 投入资本 复算）、ROIC/WACC、毛利率、净利率、ROE",
+      "盈利质量：OCF/净利润、FCF/净利润、OCF 与 FCF 数值",
+      "财务健康：资产负债率、现金与负债结构",
+      "资产效率：CAPEX/EBITDA（是否轻资产）",
+      "估值：市盈率主锚、行业 PE 中值、最新收盘价/市值换算",
+      "成长性：营收增速（是否禁用成长溢价）",
+      "业绩预告/公告：对应原文必须存在于接口返回",
+    ],
+  },
+  technical: {
+    label: "技术面子图",
+    scope: "数据接口：tool_technical",
+    items: [
+      "趋势：trend / trend_strength / 均线状态（MA20 vs MA60）",
+      "动能指标：RSI / KDJ / CCI / WR 状态",
+      "波动与通道：volatility、BOLL 位置",
+      "量价：volume_price 状态",
+      "最新收盘价 latest_close_cny 与涨跌幅",
+      "量价事件信号：金叉/死叉等 signals 与接口一致",
+    ],
+  },
+  game_theory: {
+    label: "博弈面子图",
+    scope: "数据接口：tool_game_theory",
+    items: [
+      "资金流向：主力/超大单/大单 净流入额",
+      "涨跌停：涨停/跌停/破板家数统计",
+      "龙虎榜与大宗交易：笔数、买卖方营业部、价格/数量",
+      "融资融券：余额与变化",
+      "股权质押：质押笔数/比例",
+      "机构持仓：持仓占比与变动",
+      "内部人交易/增减持：方向与数量",
+    ],
+  },
+};
+var VERIFY_METHOD = "检查方式：① 事实类 — 按 evidence 中的工具名与 JSON 路径读取原始字段，再与报告值比较；② 计算类 — 按路径读取每个公式变量，由代码复算并与报告值比对（0.5% 容差）。LLM 不提交可信输入值，失败项会反馈给分析师重做且不重新取数。";
+
+// 分析师 -> 图上的分支节点（用于校验/重试流转动画）
+var ANALYST_BRANCH_NODES = {
+  fundamentals: { branch: "Fundamentals Analyst", display: "Fundamentals" },
+  technical: { branch: "Technical Analyst", display: "Technical" },
+  game_theory: { branch: "Game_Theory Analyst", display: "Game_Theory" },
+};
+
+function flashVerifyNodes(analyst, passed) {
+  var meta = ANALYST_BRANCH_NODES[analyst];
+  if (!meta) return;
+  var fcPath = renderedPath(["Analyst Team", meta.branch, "FactChecker-" + meta.display]);
+  var fc = NODE_ELS[nodeKey(fcPath)];
+  if (fc) {
+    fc.classList.remove("st-verify-pass", "st-verify-fail");
+    fc.classList.add(passed ? "st-verify-pass" : "st-verify-fail");
+    window.setTimeout(function () { fc.classList.remove("st-verify-pass", "st-verify-fail"); }, 1800);
+  }
+  if (!passed) {
+    // 校验失败 → 重试节点橙闪 + 反馈环路粒子
+    var rcPath = renderedPath(["Analyst Team", meta.branch, "RetryClear-" + meta.display]);
+    var rc = NODE_ELS[nodeKey(rcPath)];
+    if (rc) {
+      rc.classList.add("st-retry");
+      window.setTimeout(function () { rc.classList.remove("st-retry"); }, 1800);
+    }
+    // 事实校验 → 重试 → 分析师 的返回粒子
+    var anPath = renderedPath(["Analyst Team", meta.branch, "Analyze"]);
+    if (NODE_ELS[nodeKey(fcPath)] && NODE_ELS[nodeKey(rcPath)] && NODE_ELS[nodeKey(anPath)]) {
+      animateFlow(fcPath, rcPath);
+      window.setTimeout(function () { animateFlow(rcPath, anPath); }, 600);
+    }
+  }
+}
+
+function renderResolvedEvidence(evidence) {
+  return (evidence || []).map(function (e) {
+    var label = (e.alias ? e.alias + " ← " : "") + e.source_tool + ":" + e.json_path;
+    var suffix = " = " + e.resolved_value;
+    if (e.unit) suffix += " " + e.unit;
+    if (e.period) suffix += " @" + e.period;
+    return escapeHtml(label + suffix);
+  }).join("<br>");
+}
+
+function renderVerifyRoundCard(meta, v, claims, isLatest) {
+  var html = "";
+  var passedCount = (v.items || []).filter(function (i) { return i.passed; }).length;
+  var failCount = (v.items || []).length - passedCount;
+  html += '<div class="verify-head ' + (v.passed ? "pass" : "fail") + '">';
+  html += "<span><b>" + meta.label + "</b> · 第 " + v.attempts + " 轮" +
+    (isLatest ? "" : "（历史轮次）") +
+    " · 检查项 " + (v.items || []).length + " 条（✓ " + passedCount + " / ✗ " + failCount + "）</span>";
+  html += "<span class='" + (v.passed ? "pass-tag" : "fail-tag") + "'>" + (v.passed ? "✓ 全部通过" : "✗ 存在未通过项") + "</span>";
+  html += "</div>";
+  if (v.items && v.items.length) {
+    html += "<table><tr><th>结论 (Claim)</th><th>类型</th><th>代码解析证据</th><th>报告值</th><th>期望值</th><th>通过</th><th>差异/原因</th></tr>";
+    v.items.forEach(function (item) {
+      html += "<tr><td>" + escapeHtml(item.claim) + "</td><td>" + escapeHtml(item.verification_type) + "</td><td>" + renderResolvedEvidence(item.evidence) + "</td><td>" + escapeHtml(item.reported_value) + "</td><td>" + escapeHtml(item.expected_value) + "</td><td>" +
+        (item.passed ? '<span class="pass-tag">✓</span>' : '<span class="fail-tag">✗</span>') + "</td><td>" + escapeHtml(item.failure_reason || item.difference || "") + "</td></tr>";
+    });
+    html += "</table>";
+  }
+  if (v.feedback) html += '<div class="feedback">📋 反馈给分析师：' + escapeHtml(v.feedback) + "</div>";
+  if (isLatest && claims.length) {
+    html += '<div class="claims-note">字段证据声明 (' + claims.length + ' 条): ' + claims.map(function (c) {
+      var refs = (c.evidence || []).map(function (e) { return e.source_tool + ":" + e.json_path; }).join(", ");
+      return escapeHtml(c.claim) + " ← " + escapeHtml(refs || "缺少字段证据");
+    }).join("；") + "</div>";
+  }
+  return html;
+}
+
 function renderVerifications() {
   var body = document.getElementById("verifyBody");
-  var keys = Object.keys(verifications);
-  if (!keys.length) {
-    body.innerHTML = '<div class="empty">尚无事实校验结果。<br>校验发生在 基本面/技术面/博弈面 分析师完成之后。</div>';
-    return;
-  }
-  var names = { fundamentals: "基本面", technical: "技术面", game_theory: "博弈面" };
   var html = "";
-  keys.forEach(function (analyst) {
-    var v = verifications[analyst];
+  Object.keys(VERIFY_SUBGRAPHS).forEach(function (analyst) {
     var claims = claimsMap[analyst] || [];
+    var meta = VERIFY_SUBGRAPHS[analyst];
+    var rounds = verificationRounds[analyst] || [];
     html += '<div class="verify-card">';
-    html += '<div class="verify-head ' + (v.passed ? "pass" : "fail") + '">';
-    html += "<span><b>" + (names[analyst] || analyst) + " 分析师</b> · 第 " + v.attempts + " 轮</span>";
-    html += "<span class='" + (v.passed ? "pass-tag" : "fail-tag") + "'>" + (v.passed ? "✓ 全部通过" : "✗ 存在未通过项") + "</span>";
-    html += "</div>";
-    if (v.items && v.items.length) {
-      html += "<table><tr><th>结论 (Claim)</th><th>类型</th><th>报告值</th><th>期望值</th><th>通过</th><th>差异/原因</th></tr>";
-      v.items.forEach(function (item) {
-        html += "<tr><td>" + escapeHtml(item.claim) + "</td><td>" + escapeHtml(item.verification_type) + "</td><td>" + escapeHtml(item.reported_value) + "</td><td>" + escapeHtml(item.expected_value) + "</td><td>" +
-          (item.passed ? '<span class="pass-tag">✓</span>' : '<span class="fail-tag">✗</span>') + "</td><td>" + escapeHtml(item.failure_reason || item.difference || "") + "</td></tr>";
+    if (!rounds.length) {
+      html += '<div class="verify-head pending">';
+      html += "<span><b>" + meta.label + "</b> · ⏳ 等待校验</span>";
+      html += "<span class='pass-tag'>未开始</span>";
+      html += "</div>";
+      html += '<div class="verify-desc"><b>' + meta.scope + "</b><br>" + VERIFY_METHOD + "</div>";
+      html += '<ul class="verify-list">';
+      meta.items.forEach(function (item) {
+        html += "<li><span class='verify-tick'>☐</span>" + escapeHtml(item) + "</li>";
       });
-      html += "</table>";
+      html += "</ul>";
+    } else {
+      // 每轮校验实时/历史全量展示：最新轮在上，历史轮次（含第 1 轮未通过项）保留
+      for (var i = rounds.length - 1; i >= 0; i--) {
+        html += renderVerifyRoundCard(meta, rounds[i], claims, i === rounds.length - 1);
+      }
     }
-    if (v.feedback) html += '<div class="feedback">📋 反馈给分析师：' + escapeHtml(v.feedback) + "</div>";
-    if (claims.length) {
-      html += '<div class="claims-note">来源声明 (' + claims.length + ' 条): ' + claims.map(function (c) {
-        return escapeHtml(c.claim) + " ← " + escapeHtml(c.source_tool);
-      }).join("；") + "</div>";
-    }
+
     html += "</div>";
   });
   body.innerHTML = html;
 }
 
-function appendReport(agent, report) {
+var lastAgentReport = {};   // agent -> 最近一次追加的报告内容（防重复追加）
+var lastDecisionText = null;
+
+function debateBlockHtml(title, text) {
+  var t = (text || "").trim();
+  if (!t) return "";
+  return '<div class="debate-block"><b>' + title + '</b><pre>' + escapeHtml(t) + '</pre></div>';
+}
+
+function appendReport(agent, ev) {
+  var report = ev.report || "";
+  if (report && lastAgentReport[agent] === report) return;  // 同一内容不重复追加
+  if (report) lastAgentReport[agent] = report;
   var body = document.getElementById("reportBody");
   var empty = body.querySelector(".empty");
   if (empty) empty.remove();
@@ -237,39 +1209,59 @@ function appendReport(agent, report) {
   section.className = "report-section";
   var h = document.createElement("h3");
   h.textContent = agent;
+  section.appendChild(h);
+  // 研究经理：附带辩论全文（多方/空方）；PM 决策：附带三方风控辩论
+  if (ev.debate_bull || ev.debate_bear) {
+    var db = document.createElement("div");
+    db.className = "debate-block-wrap";
+    db.innerHTML = debateBlockHtml("📢 多方辩论（Bull Researcher）", ev.debate_bull) +
+                   debateBlockHtml("📉 空方辩论（Bear Researcher）", ev.debate_bear);
+    section.appendChild(db);
+  }
   var pre = document.createElement("pre");
   pre.textContent = report;
-  section.appendChild(h);
   section.appendChild(pre);
   body.prepend(section);
 }
 
-function showDecision(report) {
+function showDecision(report, ev) {
+  if (report && lastDecisionText === report) return;  // 防重复
+  if (report) lastDecisionText = report;
   var body = document.getElementById("reportBody");
   var empty = body.querySelector(".empty");
   if (empty) empty.remove();
   var box = document.createElement("div");
   box.className = "decision-box";
-  box.innerHTML = "<h3>🎯 最终决策 (Portfolio Manager)</h3><pre style='white-space:pre-wrap;font-family:inherit'>" + escapeHtml(report) + "</pre>";
+  var html = "<h3>🎯 最终决策 (Portfolio Manager)</h3>";
+  if (ev && (ev.risk_aggressive || ev.risk_conservative || ev.risk_neutral)) {
+    html += debateBlockHtml("🛡 激进风控（Aggressive Analyst）", ev.risk_aggressive);
+    html += debateBlockHtml("🧊 保守风控（Conservative Analyst）", ev.risk_conservative);
+    html += debateBlockHtml("⚖️ 中性风控（Neutral Analyst）", ev.risk_neutral);
+  }
+  html += "<pre style='white-space:pre-wrap;font-family:inherit'>" + escapeHtml(report) + "</pre>";
+  box.innerHTML = html;
   body.prepend(box);
 }
 
 function switchTab(name) {
+  document.getElementById("graphBody").style.display = name === "graph" ? "flex" : "none";
   document.getElementById("activityBody").style.display = name === "activity" ? "" : "none";
   document.getElementById("verifyBody").style.display = name === "verify" ? "" : "none";
   document.getElementById("nodeStatsBody").style.display = name === "nodestats" ? "" : "none";
+  document.getElementById("tabGraph").className = name === "graph" ? "active" : "";
   document.getElementById("tabActivity").className = name === "activity" ? "active" : "";
   document.getElementById("tabVerify").className = name === "verify" ? "active" : "";
   document.getElementById("tabNodeStats").className = name === "nodestats" ? "active" : "";
+  if (name === "graph") window.setTimeout(graphZoomFit, 60);
 }
 
 function renderNodeStats(stats) {
   if (!stats) return;
   var body = document.getElementById("nodeStatsBody");
-  var html = "<table><tr><th>图节点</th><th>LLM 调用</th><th>Tokens ↑</th><th>Tokens ↓</th><th>耗时</th></tr>";
+  var html = "<table><tr><th>图节点</th><th>LLM 调用</th><th>Tokens ↑</th><th>Tokens ↓</th><th>节点耗时</th><th>LLM 耗时</th></tr>";
   Object.keys(stats).sort().forEach(function (node) {
     var s = stats[node];
-    html += "<tr><td>" + escapeHtml(node) + "</td><td>" + s.calls + "</td><td>" + fmtTokens(s.tokens_in) + "</td><td>" + fmtTokens(s.tokens_out) + "</td><td>" + (s.time_ms / 1000).toFixed(1) + "s</td></tr>";
+    html += "<tr><td>" + escapeHtml(node) + "</td><td>" + s.calls + "</td><td>" + fmtTokens(s.tokens_in) + "</td><td>" + fmtTokens(s.tokens_out) + "</td><td>" + ((s.time_ms || 0) / 1000).toFixed(1) + "s</td><td>" + ((s.llm_time_ms || 0) / 1000).toFixed(1) + "s</td></tr>";
   });
   html += "</table>";
   body.innerHTML = html;
@@ -298,6 +1290,46 @@ function addLLMCall(ev) {
   while (body.childNodes.length > 200) body.removeChild(body.firstChild);
 }
 
+/* -------- LLM 流式输出：token 实时显示在活动流里 -------- */
+
+function llmStreamDiv(node) {
+  var body = document.getElementById("activityBody");
+  var st = streamState[node];
+  if (st && !st.done) return st;
+  if (st && st.done) {
+    // 同一节点新一轮调用：换一块新的流式区域
+    st.div.remove();
+    delete streamState[node];
+    st = null;
+  }
+  var div = document.createElement("div");
+  div.className = "llm-stream";
+  div.innerHTML = '<span class="llm-stream-head">◌ LLM 输出中 · ' + escapeHtml(node) + '</span><pre></pre>';
+  body.appendChild(div);
+  st = streamState[node] = { div: div, pre: div.querySelector("pre"), buf: "", done: false };
+  return st;
+}
+
+function addToken(ev) {
+  var node = ev.node || "llm";
+  var st = llmStreamDiv(node);
+  st.buf += ev.token;
+  if (st.buf.length > 8000) st.buf = "…" + st.buf.slice(-7000);  // 防超长
+  st.pre.textContent = st.buf;
+  var body = document.getElementById("activityBody");
+  body.scrollTop = body.scrollHeight;
+}
+
+function finalizeStream(node, output) {
+  var st = streamState[node];
+  if (!st) return;
+  st.done = true;
+  st.div.classList.add("done");
+  st.div.querySelector(".llm-stream-head").textContent = "✓ LLM 输出 · " + node;
+  // 完成后用完整输出覆盖流式缓冲（展示前 3000 字符，详情可点开记录行查看）
+  st.pre.textContent = (output || st.buf).slice(0, 3000);
+}
+
 function setBadge(text, cls) {
   var b = document.getElementById("jobBadge");
   b.textContent = text;
@@ -316,12 +1348,24 @@ function startAnalysis() {
   setBadge("启动中...", "pending");
   document.getElementById("activityBody").innerHTML = "";
   document.getElementById("reportBody").innerHTML = '<div class="empty">等待分析开始...</div>';
-  document.getElementById("verifyBody").innerHTML = "";
   verifications = {}; claimsMap = {};
+  verificationRounds = {};   // 每轮校验历史在新一轮分析时清空
+  streamState = {};          // 清空旧的流式输出区域
+  lastAgentReport = {};      // 报告去重标记
+  lastDecisionText = null;
+  renderVerifications();  // 校验面板先渲染三个子图的检查项（待校验状态）
   initAgents();
+  resetGraphStates();
+  loadGraph(analysts, true);
   startTime = Date.now();
   if (timerId) clearInterval(timerId);
   timerId = setInterval(updateElapsed, 1000);
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  if (stateTimer) { clearInterval(stateTimer); stateTimer = null; }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  currentJobId = null;
+  pausedNotified = false;
+  setControlButtons("idle");
 
   fetch("/api/v1/analyze", {
     method: "POST",
@@ -330,20 +1374,145 @@ function startAnalysis() {
   })
     .then(function (r) { return r.json(); })
     .then(function (job) {
+      currentJobId = job.job_id;
       setBadge("运行中", "running");
+      // 暂停/继续/停止控制可用
+      setControlButtons("running");
       addActivity("ticker", "会话已开启 job=" + job.job_id + " 标的=" + ticker + " 日期=" + date);
-      var es = new EventSource("/api/v1/analyze/" + job.job_id + "/stream");
-      es.onmessage = function (e) {
-        var ev = JSON.parse(e.data);
-        handleEvent(ev, es);
-      };
-      es.onerror = function () { es.close(); };
+      connectStream(job.job_id);
+      startStatePoll();
     })
     .catch(function (err) {
       setBadge("失败", "failed");
       addActivity("error", "启动失败: " + err);
       document.getElementById("startBtn").disabled = false;
     });
+}
+
+var currentJobId = null;
+var eventSource = null;
+var stateTimer = null;
+var reconnectTimer = null;
+var pausedNotified = false;
+var lastByBranch = {};
+var streamState = {};        // node -> {div, pre, buf, done} LLM 流式输出
+var verificationRounds = {}; // analyst -> [每轮校验事件]（含历史轮次）
+
+function connectStream(jobId) {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  eventSource = new EventSource("/api/v1/analyze/" + jobId + "/stream");
+  eventSource.onmessage = function (e) {
+    var ev = JSON.parse(e.data);
+    handleEvent(ev, eventSource);
+  };
+  eventSource.onerror = function () {
+    if (eventSource) { eventSource.close(); eventSource = null; }
+    scheduleReconnect();
+  };
+}
+
+// SSE 短暂断开后自动重连（仅当后端仍在运行中；
+// paused 是服务端主动关闭流，等待用户点「继续」后由 resumeAnalysis 重连）
+function scheduleReconnect() {
+  if (!currentJobId || reconnectTimer) return;
+  reconnectTimer = setTimeout(function () {
+    reconnectTimer = null;
+    if (!currentJobId) return;
+    fetch("/api/v1/analyze/" + currentJobId + "/result")
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        var alive = res.status === "running" || res.status === "pending";
+        if (alive) {
+          addActivity("ticker", "↻ SSE 重连...");
+          connectStream(currentJobId);
+        }
+      })
+      .catch(function () { /* server 未就绪时静默 */ });
+  }, 2000);
+}
+
+// 状态轮询兜底：SSE 断开（暂停/停止/刷新）后也能同步终态；
+// paused 也要处理 —— 否则后端已暂停而前端「继续」按钮一直禁用
+function startStatePoll() {
+  if (stateTimer) clearInterval(stateTimer);
+  stateTimer = setInterval(function () {
+    if (!currentJobId) return;
+    fetch("/api/v1/analyze/" + currentJobId + "/result")
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res.status === "stopped") {
+          setBadge("已停止", "failed");
+          setControlButtons("stopped");
+          if (stateTimer) { clearInterval(stateTimer); stateTimer = null; }
+          addActivity("error", "⛔ 分析已停止（LLM 执行已中断，检查点已清空）");
+        } else if (res.status === "paused") {
+          setBadge("已暂停", "pending");
+          setControlButtons("paused");
+          if (!pausedNotified) {
+            pausedNotified = true;
+            addActivity("ticker", "⏸ 已暂停：当前进度已写入检查点，点击「继续」从检查点恢复");
+          }
+        } else if (res.status === "running") {
+          // 运行中（含后端暂停请求尚未生效的 pausing 状态）：保持暂停按钮可点
+          if (document.getElementById("resumeBtn").disabled === false) {
+            // 从 paused 恢复：恢复运行态控制按钮
+            setControlButtons("running");
+            setBadge("运行中", "running");
+          }
+        } else if (res.status === "completed" || res.status === "failed") {
+          if (stateTimer) { clearInterval(stateTimer); stateTimer = null; }
+        }
+      })
+      .catch(function () { /* server 未就绪时静默 */ });
+  }, 1200);
+}
+
+function setControlButtons(mode) {
+  document.getElementById("pauseBtn").disabled = (mode !== "running");
+  document.getElementById("resumeBtn").disabled = (mode !== "paused");
+  document.getElementById("stopBtn").disabled = !(mode === "running" || mode === "paused" || mode === "pausing");
+}
+
+function pauseAnalysis() {
+  if (!currentJobId) return;
+  setBadge("暂停中...", "pending");
+  setControlButtons("pausing");
+  fetch("/api/v1/analyze/" + currentJobId + "/pause", { method: "POST" })
+    .then(function (r) { return r.json(); })
+    .then(function (j) { if (j.status === "pausing") addActivity("ticker", "⏸ 已请求暂停（当前节点结束后生效，进度将写入检查点）"); })
+    .catch(function (err) {
+      setControlButtons("running");
+      setBadge("运行中", "running");
+      addActivity("error", "暂停失败: " + err);
+    });
+}
+
+function resumeAnalysis() {
+  if (!currentJobId) return;
+  pausedNotified = false;
+  fetch("/api/v1/analyze/" + currentJobId + "/resume", { method: "POST" })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      setBadge("运行中", "running");
+      setControlButtons("running");
+      addActivity("ticker", "▶ 从检查点继续分析 job=" + currentJobId);
+      connectStream(currentJobId);  // 重新连接 SSE 接收后续事件
+    })
+    .catch(function (err) {
+      addActivity("error", "继续失败: " + err);
+      setControlButtons("paused");
+    });
+}
+
+function stopAnalysis() {
+  if (!currentJobId) return;
+  document.getElementById("stopBtn").disabled = true;
+  addActivity("ticker", "⛔ 正在停止（中断 LLM 执行并清空检查点）...");
+  fetch("/api/v1/analyze/" + currentJobId + "/stop", { method: "POST" })
+    .then(function (r) { return r.json(); })
+    .catch(function (err) { addActivity("error", "停止失败: " + err); });
+  // 状态由 SSE/轮询同步
 }
 
 function handleEvent(ev, es) {
@@ -353,19 +1522,28 @@ function handleEvent(ev, es) {
       setAgent("Technical Analyst (技术面)", "in_progress");
       setAgent("Game Theory Analyst (博弈面)", "in_progress");
       setAgent("News Sentiment Analyst (新闻舆情)", "in_progress");
+      setAgent("Macro Analyst (宏观环境)", "in_progress");
+      setNodeState(["__start__"], "running");
+      updateCurrentNodeBox("分析师团队（阶段 1/5）", "运行中");
+      break;
+    case "node_started":
+      onNodeStarted(ev);
+      break;
+    case "node":
+      onNodeCompleted(ev);
       break;
     case "agent_completed":
       markAnalystCompleted(ev.report_key);
       if (ev.agent === "Research Manager") { setAgent("Bull Researcher", "completed"); setAgent("Bear Researcher", "completed"); setAgent("Research Manager", "completed"); setAgent("Trader", "in_progress"); }
       if (ev.agent === "Trader") { setAgent("Trader", "completed"); setAgent("Aggressive Analyst", "in_progress"); }
-      appendReport(ev.agent, ev.report);
+      appendReport(ev.agent, ev);
       break;
     case "decision":
       setAgent("Aggressive Analyst", "completed");
       setAgent("Conservative Analyst", "completed");
       setAgent("Neutral Analyst", "completed");
       setAgent("Portfolio Manager", "completed");
-      showDecision(ev.report);
+      showDecision(ev.report, ev);
       break;
     case "claims":
       claimsMap[ev.analyst] = ev.claims;
@@ -373,25 +1551,43 @@ function handleEvent(ev, es) {
       break;
     case "verification":
       verifications[ev.analyst] = ev;
+      // 保留每轮历史：第 1 轮未通过项 + 第 2 轮复查项都实时展示在事实检验面板
+      (verificationRounds[ev.analyst] = verificationRounds[ev.analyst] || []).push(ev);
       renderVerifications();
+      flashVerifyNodes(ev.analyst, ev.passed);
       if (ev.passed) {
-        addActivity("done", "FactChecker-" + ev.analyst + " 第" + ev.attempts + "轮校验 ✓ 通过");
+        addActivity("done", "FactChecker-" + ev.analyst + " 第" + ev.attempts + "轮校验 ✓ 通过（" +
+          (ev.items || []).length + " 项）");
       } else {
-        addActivity("error", "FactChecker-" + ev.analyst + " 第" + ev.attempts + "轮校验 ✗ 未通过 → 反馈分析师重做");
+        var failN = (ev.items || []).filter(function (i) { return !i.passed; }).length;
+        addActivity("error", "FactChecker-" + ev.analyst + " 第" + ev.attempts + "轮校验 ✗ " +
+          failN + " 项未通过 → 反馈分析师重做");
       }
       break;
     case "tool":
-      if (ev.status === "running") addActivity("running", "⚙ " + ev.name + "(" + escapeHtml(ev.args || "") + ") 执行中...");
-      else if (ev.status === "done") addActivity("done", "✓ " + ev.name + " 完成 " + escapeHtml(ev.detail || ""));
-      else addActivity("error", "✗ " + ev.name + " 失败 " + escapeHtml(ev.detail || ""));
+      if (ev.status === "running") {
+        addActivity("running", "⚙ " + ev.name + "(" + escapeHtml(ev.args || "") + ") 执行中... · [" + escapeHtml(ev.node || "unknown") + "]");
+      } else if (ev.status === "done") {
+        var toolLine = "✓ " + ev.name + "(" + escapeHtml(ev.args || "") + ") 完成 " + escapeHtml(ev.detail || "") +
+          " · [" + escapeHtml(ev.node || "unknown") + "]";
+        if (ev.consumer) toolLine += " → 用途: " + escapeHtml(ev.consumer);
+        if (ev.result) toolLine += " · 结果: " + escapeHtml(String(ev.result).slice(0, 200));
+        addActivity("done", toolLine);
+      } else {
+        addActivity("error", "✗ " + ev.name + "(" + escapeHtml(ev.args || "") + ") 失败 " +
+          escapeHtml(ev.detail || "") + " · [" + escapeHtml(ev.node || "unknown") + "]");
+      }
+      if (TOOL_KEYS[ev.name]) flashNode(TOOL_KEYS[ev.name]);
+      break;
+    case "llm_token":
+      // 流式输出：实时打字显示在活动流
+      addToken(ev);
       break;
     case "llm_call":
       addLLMCall(ev);
+      finalizeStream(ev.node, ev.output);  // 流式区域收尾为最终输出
       if (ev.node_stats) renderNodeStats(ev.node_stats);
-      break;
-    case "node":
-      document.getElementById("currentNodeBox").innerHTML = "当前节点: <b>" + escapeHtml(ev.node) + "</b> " + (ev.node_stats ? "(该节点已花费 " + (ev.node_stats[ev.node] ? (ev.node_stats[ev.node].time_ms / 1000).toFixed(1) + "s" : "-") + ")" : "");
-      if (ev.node_stats) renderNodeStats(ev.node_stats);
+      if (ev.node) flashNode(ev.node);
       break;
     case "ticker":
       addActivity("ticker", "🔒 标的代码归一化: " + escapeHtml(ev.previous) + " → " + escapeHtml(ev.ticker));
@@ -402,22 +1598,61 @@ function handleEvent(ev, es) {
     case "completed":
       if (ev.stats) updateStats(ev.stats);
       if (ev.node_stats) renderNodeStats(ev.node_stats);
+      setNodeState(["__end__"], "done");
+      if (lastCompleted) animateFlow(lastCompleted, ["__end__"]);
+      Object.keys(NODE_ELS).forEach(function (k) {
+        var el = NODE_ELS[k];
+        if (el.getAttribute("data-state") === "running") {
+          el.setAttribute("data-state", "done");
+          el.classList.remove("st-running");
+          el.classList.add("st-done");
+        }
+      });
       setBadge("完成", "completed");
       addActivity("done", "✅ 分析完成 决策: " + escapeHtml(ev.decision || "-"));
       document.getElementById("startBtn").disabled = false;
-      es.close();
+      setControlButtons("stopped");
+      if (stateTimer) { clearInterval(stateTimer); stateTimer = null; }
+      if (eventSource) { eventSource.close(); eventSource = null; }
       break;
     case "error":
       setBadge("失败", "failed");
       addActivity("error", "❌ 分析失败: " + escapeHtml(ev.error));
       document.getElementById("startBtn").disabled = false;
-      es.close();
+      setControlButtons("stopped");
+      if (stateTimer) { clearInterval(stateTimer); stateTimer = null; }
+      if (eventSource) { eventSource.close(); eventSource = null; }
+      break;
+    case "paused":
+      pausedNotified = true;
+      setBadge("已暂停", "pending");
+      addActivity("ticker", "⏸ 已暂停：当前进度已写入检查点，点击「继续」从检查点恢复");
+      setControlButtons("paused");
+      if (eventSource) { eventSource.close(); eventSource = null; }
+      break;
+    case "resumed":
+      pausedNotified = false;
+      setBadge("运行中", "running");
+      addActivity("ticker", "▶ 已从检查点继续");
+      setControlButtons("running");
+      break;
+    case "stopped":
+      setBadge("已停止", "failed");
+      addActivity("error", "⛔ 分析已停止（LLM 执行已中断，检查点已清空）");
+      document.getElementById("startBtn").disabled = false;
+      setControlButtons("stopped");
+      if (stateTimer) { clearInterval(stateTimer); stateTimer = null; }
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      if (eventSource) { eventSource.close(); eventSource = null; }
       break;
   }
 }
 
 document.getElementById("date").value = new Date().toISOString().slice(0, 10);
 initAgents();
+renderVerifications();  // 校验面板初始即展示三个子图的检查项（待校验）
+switchTab("graph");
+loadGraph(["fundamentals", "technical", "game_theory", "news_sentiment", "macro"], true);
 // Enter key in ticker/date fields also starts the analysis
 document.addEventListener("keydown", function (e) {
   if (e.key === "Enter" && document.activeElement &&
@@ -425,6 +1660,7 @@ document.addEventListener("keydown", function (e) {
     startAnalysis();
   }
 });
+window.addEventListener("resize", function () { if (document.getElementById("graphBody").style.display !== "none") graphZoomFit(); });
 </script>
 </body>
 </html>

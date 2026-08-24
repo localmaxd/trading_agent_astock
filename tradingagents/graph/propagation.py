@@ -53,6 +53,7 @@ class Propagator:
             "technical_report": "",
             "game_theory_report": "",
             "news_sentiment_report": "",
+            "macro_environment_report": "",
             "fundamentals_claims": [],
             "technical_claims": [],
             "game_theory_claims": [],
@@ -61,6 +62,7 @@ class Propagator:
             "messages_technical": [],
             "messages_game_theory": [],
             "messages_news_sentiment": [],
+            "messages_macro": [],
         }
 
     def get_graph_args(self, callbacks: Optional[List] = None) -> Dict[str, Any]:
