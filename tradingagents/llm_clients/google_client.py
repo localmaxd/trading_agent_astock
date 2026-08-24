@@ -35,6 +35,9 @@ class GoogleClient(BaseLLMClient):
             if key in self.kwargs:
                 llm_kwargs[key] = self.kwargs[key]
 
+        # 流式输出：按 token 回调 on_llm_new_token，供 Web 实时展示模型输出
+        llm_kwargs["streaming"] = True
+
         # Unified api_key maps to provider-specific google_api_key
         google_api_key = self.kwargs.get("api_key") or self.kwargs.get("google_api_key")
         if google_api_key:

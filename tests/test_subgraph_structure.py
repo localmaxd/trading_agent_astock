@@ -5,9 +5,12 @@ The pipeline is split into five independently compiled stage subgraphs
 Manager) orchestrated by a thin parent graph. These tests verify:
 
 1. the parent graph embeds exactly the five stage subgraphs,
-2. each subgraph contains the expected internal nodes,
-3. the full pipeline runs end-to-end with deterministic fake LLMs,
-4. checkpoint resume still works when a run crashes inside a subgraph.
+2. Analyst Team embeds one independently compiled analyst subgraph per
+   selected analyst (fundamentals / technical / game_theory / news_sentiment /
+   macro),
+3. each analyst subgraph owns its tool / verification / retry nodes,
+4. the full pipeline runs end-to-end with deterministic fake LLMs,
+5. checkpoint resume still works when a run crashes inside a subgraph.
 """
 
 from __future__ import annotations
@@ -28,7 +31,7 @@ from tradingagents.agents.schemas import (
 )
 from tradingagents.default_config import DEFAULT_CONFIG
 
-ALL_ANALYSTS = ["fundamentals", "technical", "game_theory", "news_sentiment"]
+ALL_ANALYSTS = ["fundamentals", "technical", "game_theory", "news_sentiment", "macro"]
 
 
 class StructuredProxy:
@@ -130,6 +133,19 @@ def _subgraph_nodes(workflow, name):
     return sorted(n for n in compiled.get_graph().nodes if not n.startswith("__"))
 
 
+def _analyst_graph(workflow, analyst_name):
+    """Return one compiled analyst graph nested inside Analyst Team."""
+    team = workflow.nodes["Analyst Team"].runnable
+    analyst = team.get_graph().nodes[analyst_name].data
+    assert type(analyst).__name__ == "CompiledStateGraph"
+    return analyst
+
+
+def _analyst_nodes(workflow, analyst_name):
+    analyst = _analyst_graph(workflow, analyst_name)
+    return sorted(n for n in analyst.get_graph().nodes if not n.startswith("__"))
+
+
 STAGE_SUBGRAPHS = ["Analyst Team", "Research Debate", "Trader", "Risk Debate", "Portfolio Manager"]
 TICKER_GUARDS = [f"TickerGuard-{s}" for s in STAGE_SUBGRAPHS]
 
@@ -163,27 +179,45 @@ class TestStageSubgraphInternals:
     def test_analyst_team_subgraph_nodes(self, tmp_path):
         ta = _build_graph(_make_config(tmp_path))
         nodes = _subgraph_nodes(ta.workflow, "Analyst Team")
-        # verify_enabled=False in this suite: no FactChecker nodes expected,
-        # and no Msg Clear nodes (parallel branches need no clearing)
+        # The team coordinator contains one compiled subgraph per selected
+        # analyst, not their tools/checkers as flat siblings.
         assert nodes == sorted([
-            "Fundamentals Analyst", "tools_fundamentals",
-            "Technical Analyst", "tools_technical",
-            "Game_Theory Analyst", "tools_game_theory",
-            "News_Sentiment Analyst", "tools_news_sentiment",
+            "Fundamentals Analyst",
+            "Technical Analyst",
+            "Game_Theory Analyst",
+            "News_Sentiment Analyst",
+            "Macro Analyst",
         ])
+        expected_tools = {
+            "Fundamentals Analyst": "tools_fundamentals",
+            "Technical Analyst": "tools_technical",
+            "Game_Theory Analyst": "tools_game_theory",
+            "News_Sentiment Analyst": "tools_news_sentiment",
+            "Macro Analyst": "tools_macro",
+        }
+        for analyst, tool in expected_tools.items():
+            assert _analyst_nodes(ta.workflow, analyst) == ["Analyze", tool]
 
     def test_analyst_team_subgraph_includes_fact_checkers_when_enabled(self, tmp_path):
         config = _make_config(tmp_path)
         config["verify_enabled"] = True
         ta = _build_graph(config)
-        nodes = _subgraph_nodes(ta.workflow, "Analyst Team")
-        for extra in (
-            "FactChecker-Fundamentals", "RetryClear-Fundamentals",
-            "FactChecker-Technical", "RetryClear-Technical",
-            "FactChecker-Game_Theory", "RetryClear-Game_Theory",
-        ):
-            assert extra in nodes, f"missing {extra}"
-        assert "FactChecker-News_Sentiment" not in nodes  # news sentiment is not verified
+        verified = {
+            "Fundamentals Analyst": "Fundamentals",
+            "Technical Analyst": "Technical",
+            "Game_Theory Analyst": "Game_Theory",
+        }
+        for analyst, display in verified.items():
+            nodes = _analyst_nodes(ta.workflow, analyst)
+            assert f"FactChecker-{display}" in nodes
+            assert f"RetryClear-{display}" in nodes
+        news_nodes = _analyst_nodes(ta.workflow, "News_Sentiment Analyst")
+        assert "FactChecker-News_Sentiment" not in news_nodes
+        # Macro analyst: no fact-checker and no retry (only market_environment tool)
+        macro_nodes = _analyst_nodes(ta.workflow, "Macro Analyst")
+        assert "FactChecker-Macro" not in macro_nodes
+        assert "RetryClear-Macro" not in macro_nodes
+        assert macro_nodes == ["Analyze", "tools_macro"]
 
     def test_analysts_run_in_parallel_from_start(self, tmp_path):
         """Every analyst must be reachable directly from START (fan-out):
@@ -196,8 +230,11 @@ class TestStageSubgraphInternals:
             "Technical Analyst",
             "Game_Theory Analyst",
             "News_Sentiment Analyst",
+            "Macro Analyst",
         ):
             assert ("__start__", analyst) in edges, f"{analyst} not fanned out from START"
+            assert (analyst, "__end__") in edges, f"{analyst} not joined at END"
+            assert hasattr(_analyst_graph(ta.workflow, analyst), "get_graph")
         # No sequential hand-off edges between analysts
         assert ("Fundamentals Analyst", "Technical Analyst") not in edges
 
@@ -223,12 +260,13 @@ class TestEndToEndPipeline:
         ta = _build_graph(_make_config(tmp_path))
         final_state, signal = ta.propagate("600519.SH", "2026-05-10")
 
-        # All four analyst reports flow through the Analyst Team subgraph
+        # All analyst reports flow through the Analyst Team subgraph
         for key in (
             "fundamentals_report",
             "technical_report",
             "game_theory_report",
             "news_sentiment_report",
+            "macro_environment_report",
         ):
             assert final_state[key], f"{key} empty"
 
@@ -252,7 +290,7 @@ class TestCheckpointResumeThroughSubgraphs:
     def test_crash_inside_subgraph_then_resume(self, tmp_path):
         """A crash inside a stage subgraph must be resumable from the checkpoint."""
         config = _make_config(tmp_path, checkpoint_enabled=True)
-        llm = CrashLLM(crash_after=8)  # crash inside the Trader subgraph
+        llm = CrashLLM(crash_after=9)  # crash inside the Trader subgraph
         ta = _build_graph(config, llm=llm)
 
         with pytest.raises(RuntimeError, match="simulated mid-run crash"):

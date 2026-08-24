@@ -15,9 +15,16 @@ ANALYST_ORDER = [
     ("Technical Analyst (技术面)", AnalystType.TECHNICAL),
     ("Game Theory Analyst (博弈面)", AnalystType.GAME_THEORY),
     ("News Sentiment Analyst (新闻舆情)", AnalystType.NEWS_SENTIMENT),
+    ("Macro Analyst (宏观环境)", AnalystType.MACRO),
 ]
 
-DEFAULT_ANALYSTS = [AnalystType.FUNDAMENTALS, AnalystType.TECHNICAL, AnalystType.GAME_THEORY, AnalystType.NEWS_SENTIMENT]
+DEFAULT_ANALYSTS = [
+    AnalystType.FUNDAMENTALS,
+    AnalystType.TECHNICAL,
+    AnalystType.GAME_THEORY,
+    AnalystType.NEWS_SENTIMENT,
+    AnalystType.MACRO,
+]
 
 
 def get_ticker() -> str:

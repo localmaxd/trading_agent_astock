@@ -27,11 +27,12 @@ from tradingagents.agents.utils.agent_states import (
 from tradingagents.dataflows.config import set_config
 from .ticker_guard import normalize_ticker
 
-# Import external API tools for the 5 analysts
+# Import external API tools for the analysts
 from tradingagents.agents.utils.external_api_tools import (
     tool_fundamental, tool_technical,
     # tool_special_data,  # 外部 API 无此接口，已停用（2026-08）
-    tool_game_theory, tool_risk, tool_news_sentiment,
+    tool_game_theory, tool_news_sentiment,
+    tool_market_environment, tool_schema, once_per_run,
 )
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
@@ -149,18 +150,28 @@ class TradingAgentsGraph:
         return kwargs
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
-        """Create tool nodes for the 4 analysts using external API tools.
+        """Create tool nodes for the analysts using external API tools.
 
         The analysts run in parallel, so each tool node writes to its own
         message channel (messages_<analyst>) to keep the conversations
         isolated.
+
+        fundamentals / technical / game_theory also expose tool_schema so the
+        agents can look up the field semantics (the external API responses are
+        versioned).  The macro analyst exposes only tool_market_environment.
+
+        Every data tool is wrapped with once_per_run: even if the model emits
+        several tool_calls for the same endpoint in one message (different
+        end_date etc.), the underlying HTTP request fires at most ONCE per run
+        — subsequent calls return a marker instead of re-fetching.
         """
         return {
-            "fundamentals": ToolNode([tool_fundamental], messages_key="messages_fundamentals"),
+            "fundamentals": ToolNode([once_per_run(tool_schema), once_per_run(tool_fundamental)], messages_key="messages_fundamentals"),
             # tool_special_data 外部 API 无此接口，已停用（2026-08）
-            "technical": ToolNode([tool_technical], messages_key="messages_technical"),
-            "game_theory": ToolNode([tool_game_theory], messages_key="messages_game_theory"),
-            "news_sentiment": ToolNode([tool_news_sentiment], messages_key="messages_news_sentiment"),
+            "technical": ToolNode([once_per_run(tool_schema), once_per_run(tool_technical)], messages_key="messages_technical"),
+            "game_theory": ToolNode([once_per_run(tool_schema), once_per_run(tool_game_theory)], messages_key="messages_game_theory"),
+            "news_sentiment": ToolNode([once_per_run(tool_news_sentiment)], messages_key="messages_news_sentiment"),
+            "macro": ToolNode([once_per_run(tool_market_environment)], messages_key="messages_macro"),
         }
 
     def _fetch_returns(
@@ -269,12 +280,13 @@ class TradingAgentsGraph:
             sys.stdout.flush()
             return
 
-        # 4 analyst reports
+        # analyst reports
         for key, name in [
             ("fundamentals_report", "Fundamentals Analyst (基本面)"),
             ("technical_report", "Technical Analyst (技术面)"),
             ("game_theory_report", "Game Theory Analyst (博弈面)"),
             ("news_sentiment_report", "News Sentiment Analyst (新闻舆情)"),
+            ("macro_environment_report", "Macro Analyst (宏观环境)"),
         ]:
             prev_val = prev_state.get(key, "")
             curr_val = curr_state.get(key, "")
@@ -351,6 +363,7 @@ class TradingAgentsGraph:
                 f"technical_len={len(chunk.get('technical_report', ''))} "
                 f"game_theory_len={len(chunk.get('game_theory_report', ''))} "
                 f"news_sentiment_len={len(chunk.get('news_sentiment_report', ''))} "
+                f"macro_len={len(chunk.get('macro_environment_report', ''))} "
                 f"trader_len={len(chunk.get('trader_investment_plan', ''))}\n"
             )
             sys.stdout.flush()
@@ -387,6 +400,7 @@ class TradingAgentsGraph:
             "technical_report": final_state["technical_report"],
             "game_theory_report": final_state["game_theory_report"],
             "news_sentiment_report": final_state["news_sentiment_report"],
+            "macro_environment_report": final_state["macro_environment_report"],
             "investment_debate_state": {
                 "bull_history": final_state["investment_debate_state"]["bull_history"],
                 "bear_history": final_state["investment_debate_state"]["bear_history"],

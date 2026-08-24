@@ -1,19 +1,94 @@
-from langchain_core.messages import HumanMessage, RemoveMessage
+from langchain_core.messages import HumanMessage, RemoveMessage, ToolMessage
+
+
+def data_tool_done(messages: list, tool_name: str) -> bool:
+    """Whether the analyst's own data tool has already been executed once.
+
+    Analysts run a ReAct loop (analyst -> tools -> analyst).  Once the data
+    tool ran, the (large) payload is in the conversation, so the loop must
+    NOT bind tools anymore: the model has to write the final report instead
+    of re-fetching the same endpoint (e.g. with a different end_date or
+    because the compacted copy looks truncated).  The first round(s) may
+    still call tool_schema (field semantics) and the data tool together.
+    """
+    return any(
+        isinstance(m, ToolMessage) and getattr(m, "name", "") == tool_name
+        for m in messages
+    )
 
 
 # Instruction appended to the analyst's structured finalizer prompt so the
-# model emits AnalystFactualReport with traceable claims (claim -> source
-# tool -> verbatim raw data excerpt) that the fact-checker can verify.
+# model emits AnalystFactualReport with field-addressable evidence that the
+# fact-checker resolves from the original tool JSON.
 STRUCTURED_REPORT_INSTRUCTION = (
     "将对话中已完成的全部分析整理为结构化报告（AnalystFactualReport）：\n"
     "1. report_markdown：完整的 Markdown 报告正文（保持原有格式：标题、表格、推理）。\n"
     "2. claims：列出报告中每一个关键数据点/结论，每条必须包含：\n"
     "   - claim：结论描述（一句话）；\n"
     "   - value：数值或定性结论；\n"
-    "   - source_tool：提供该数据的工具名（如 tool_fundamental / tool_technical）；\n"
-    "   - source_data：从工具返回内容中逐字摘录的原始数据片段，禁止编造。\n"
-    "source_data 必须能在对话中的工具返回里找到原文，找不到原文的数据点不得列入 claims。"
+    "   - evidence：原始工具名、精确 JSON 路径、变量别名、单位/期间。\n"
+    "代码会按 evidence.json_path 读取真实值；无法定位到精确字段的数据点不得列入 claims。"
 )
+
+
+# The analyst's tool-aware call already writes the user-facing report. A
+# second full AnalystFactualReport generation used to repeat the whole report
+# and its field evidence. The follow-up call now extracts provenance only.
+# 事实校验节点是纯代码校验：报告里每一条推理都必须带来源与计算方式，
+# 否则代码无法核实（字段路径是否有效 / 计算是否正确）。
+STRUCTURED_CLAIMS_INSTRUCTION = (
+    "从已有分析报告和工具返回中只提取可核验的来源声明。"
+    "不要重写报告正文。输出 AnalystClaimSet：summary 不超过100字；"
+    "claims 最多12条，只保留影响结论的关键事实。"
+    "每条 claim 必须填写 evidence：source_tool 为实际工具名，json_path 为该值在工具原始 JSON "
+    "中的精确路径（例如 $.data.financial.ebit），alias 为简短变量名；不要把 schema 工具当作数据来源。"
+    "原始事实至少提供一个 evidence，value 必须与该路径解析出的值一致。"
+    "对计算得出的数据点（比率、增长率、差值等），必须给出 formula 算术表达式，"
+    "并为公式中的每个变量提供同名 alias 的 evidence。不要复制或猜测原始输入数值，"
+    "校验代码会直接按 json_path 从首次工具返回中取值并复算。"
+    "涉及数组求和/求均值/中位数等（如 30 天资金流合计），formula 或 rule 中可使用"
+    "白名单聚合函数 sum / avg / median / min / max / count，"
+    "对应 evidence 的 json_path 用数组映射写法 $.data.rows[*].字段；数组必须非空且为一维数值数组。"
+    "对推理性/阈值判断（如 'ROIC 高于 WACC → 通过经济利润检验'、'RSI>70 → 超买'），"
+    "必须给出 rule 布尔表达式（如 'roic > wacc'、\"moat_strength == '高'\"），"
+    "变量与 evidence.alias 一一对应；结论写入 value（通过/未通过 或 真/假），"
+    "代码会从原始 JSON 取值后自行求值并核对结论，模型不得直接给出求值结果。"
+    "同一 claim 只能填写 formula 或 rule 之一；所有 evidence.alias 必须唯一且都被表达式使用。"
+    "无法提供精确 JSON 路径或完整计算方式的数据点不得列入 claims。"
+)
+
+REPORT_BUDGET_INSTRUCTION = (
+    "\n输出预算：报告正文不超过1800个中文字符；只保留影响判断的关键证据，"
+    "同类数据合并表达，表格最多12行，禁止重复粘贴原始工具数据。"
+)
+
+
+def compact_tool_messages(messages: list, max_chars: int | None = None) -> list:
+    """Return prompt-safe message copies with oversized tool content bounded.
+
+    The full ToolMessage remains in graph state for observability. Only the
+    copy passed back into the model is compacted, preserving the beginning
+    (headers/current values) and the tail (latest rows/truncation notes).
+    """
+    if max_chars is None:
+        from tradingagents.dataflows.config import get_config
+        max_chars = int(get_config().get("analyst_tool_message_max_chars", 100000))
+    if max_chars <= 0:
+        return list(messages)
+
+    compacted = []
+    for message in messages:
+        content = getattr(message, "content", None)
+        if not isinstance(message, ToolMessage) or not isinstance(content, str) or len(content) <= max_chars:
+            compacted.append(message)
+            continue
+        marker = f"\n\n[... 工具原文已压缩：原始 {len(content)} 字符 ...]\n\n"
+        available = max(0, max_chars - len(marker))
+        head_len = int(available * 0.8)
+        tail_len = available - head_len
+        bounded = content[:head_len] + marker + (content[-tail_len:] if tail_len else "")
+        compacted.append(message.model_copy(update={"content": bounded}))
+    return compacted
 
 
 def get_verify_feedback(state: dict, analyst_type: str) -> str:
@@ -199,7 +274,7 @@ def build_instrument_context(ticker: str) -> str:
 
 
 def create_msg_delete(messages_key: str = "messages"):
-    """Create a message-clearing node for one conversation channel.
+    """Create a retry-preparation node for one conversation channel.
 
     Args:
         messages_key: Which message channel to clear. The parallel analyst
@@ -208,12 +283,29 @@ def create_msg_delete(messages_key: str = "messages"):
     """
 
     def delete_messages(state):
-        """Clear the channel's messages and add placeholder for Anthropic compatibility"""
+        """Drop the rejected report while preserving its valid tool evidence.
+
+        Keeping the assistant tool-call + ToolMessage prefix lets the retry
+        revise the failed claims directly. The old implementation deleted the
+        whole conversation, forcing another tool-selection call, another HTTP
+        fetch and another full-data prompt on every verification retry.
+        """
         messages = state.get(messages_key, []) or []
-        removal_operations = [RemoveMessage(id=m.id) for m in messages]
-        placeholder = HumanMessage(content="Continue")
+        last_tool_index = -1
+        for index, message in enumerate(messages):
+            if isinstance(message, ToolMessage):
+                last_tool_index = index
+        if last_tool_index >= 0:
+            to_remove = messages[last_tool_index + 1:]
+            prompt = (
+                "根据系统提示中的代码校验反馈，用上下文中已有的工具原始数据"
+                "重新生成分析报告。不要再次调用工具（数据已在上下文中）。"
+            )
+        else:
+            to_remove = messages
+            prompt = "Continue"
+        removal_operations = [RemoveMessage(id=m.id) for m in to_remove]
+        placeholder = HumanMessage(content=prompt)
         return {messages_key: removal_operations + [placeholder]}
 
     return delete_messages
-
-

@@ -24,6 +24,10 @@ class GraphSetup:
 
         Analyst Team -> Research Debate -> Trader -> Risk Debate -> Portfolio Manager
 
+    Analyst Team is a second-level coordinator: it embeds one independently
+    compiled subgraph per selected analyst and runs those subgraphs in
+    parallel before handing their reports to Research Debate.
+
     Each stage subgraph declares only the state channels it needs (a strict
     subset of AgentState, see tradingagents.graph.subgraphs.states). The
     parent graph passes its full AgentState into every stage node, LangGraph
@@ -59,6 +63,7 @@ class GraphSetup:
                 - "technical": 技术面 Analyst
                 - "game_theory": 博弈面 Analyst
                 - "news_sentiment": 新闻舆情 Analyst
+                - "macro": 宏观环境 Analyst
                 Unknown types are silently skipped (legacy behaviour).
 
         Returns:

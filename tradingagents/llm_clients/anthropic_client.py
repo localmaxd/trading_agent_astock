@@ -41,6 +41,9 @@ class AnthropicClient(BaseLLMClient):
             if key in self.kwargs:
                 llm_kwargs[key] = self.kwargs[key]
 
+        # 流式输出：按 token 回调 on_llm_new_token，供 Web 实时展示模型输出
+        llm_kwargs["streaming"] = True
+
         return NormalizedChatAnthropic(**llm_kwargs)
 
     def validate_model(self) -> bool:

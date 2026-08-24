@@ -74,6 +74,7 @@ class AgentState(MessagesState):
     technical_report: Annotated[str, "Report from the Technical Analyst (技术面)"]
     game_theory_report: Annotated[str, "Report from the Game Theory Analyst (博弈面)"]
     news_sentiment_report: Annotated[str, "Report from the News & Sentiment Analyst (新闻舆情)"]
+    macro_environment_report: Annotated[str, "Report from the Macro/Market Environment Analyst (宏观环境)"]
 
     # Structured claims (AnalystClaim dicts) backing each verified report.
     # Populated by the analyst finalizers; consumed by the fact-checker nodes.
@@ -81,7 +82,7 @@ class AgentState(MessagesState):
     technical_claims: Annotated[list, "Structured claims with sources from the Technical Analyst"]
     game_theory_claims: Annotated[list, "Structured claims with sources from the Game Theory Analyst"]
 
-    # Per-analyst message channels: the four analysts run in PARALLEL inside
+    # Per-analyst message channels: the analysts run in PARALLEL inside
     # the Analyst Team stage, so each keeps its own tool-loop conversation
     # (analyst <-> tools) without cross-contamination. The shared 'messages'
     # channel remains for the downstream stages.
@@ -89,6 +90,7 @@ class AgentState(MessagesState):
     messages_technical: Annotated[list, add_messages]
     messages_game_theory: Annotated[list, add_messages]
     messages_news_sentiment: Annotated[list, add_messages]
+    messages_macro: Annotated[list, add_messages]
 
     # Fact-checker bookkeeping per analyst: attempts / passed / feedback / items.
     # Merged by analyst key because the parallel fact-checkers write concurrently.

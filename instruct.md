@@ -327,16 +327,16 @@ v0.2.4 起流水线从单一 StateGraph 重构为 **5 个独立编译的阶段�
 - 智能体**自主规划**：fundamentals / technical / game_theory 分析师（`web_search_analysts` 可配）的工具列表中可选 `web_search_tool`，可自主决定是否去东方财富（eastmoney.com）等网站补充信息
 - 配置：`web_search_enabled`（总开关，默认 False）、`web_search_model`（默认 deepseek-chat）
 
-**事实确认节点（默认开启）**——`tradingagents/graph/fact_checker.py`：
+**事实确认节点（默认开启）**——`tradingagents/graph/fact_checker.py`（**纯代码校验 + 自查，节点内不调用 LLM**）：
 
 - 在 fundamentals / technical / game_theory **输出节点之后**插入 `FactChecker-<分析师>` 节点：
-  1. **代码二次取数**：重新调用该分析师自己的工具（复算/复现）+ 按**数据重叠面**挑选的交叉来源工具（同一事实在多个独立端点出现时方可交叉，如 game_theory ↔ tool_risk 的内部人交易、technical ↔ tool_game_theory 的资金流向、fundamentals ↔ tool_news_sentiment 的公告）
-  2. **多轮联网搜索**（`web_search_enabled` 开启时）：搜索规划 LLM 先分析报告/claims 生成 `VerificationSearchPlan`（0-N 条 query）→ 代码逐条执行 `web_search_tool`（单条失败自动重试一次）→ 基于已有结果进行第 2 轮补充规划（`verify_search_max_queries`=4 条/轮、`verify_search_max_rounds`=2 轮预算）；规划器不可用时回退为分析师主题模板 query；常规取数循环中跳过 web_search_tool，避免模板与规划搜索双重调用
-  2. **结构化校验**：校验 LLM 输出 `FactVerificationReport`（Pydantic Schema），逐项给出 事实比对（fact）或 重新计算（calculation）结果；prompt 内置**逐分析师交叉指引**（哪些字段可跨源比对、哪些必须复算、哪些只能作锚点），防止用不相干数据源臆造比对
-  3. **失败反馈闭环**：校验失败时把失败原因写入 `verification_state`，通过 `RetryClear` 节点把前置分析师**送回去重新组织材料**（feedback 注入其 prompt），最多 `max_verify_rounds`（默认 2）轮；超限后报告标记为未通过并继续，不阻塞流水线
-- 分析师输出升级为 `AnalystFactualReport`（结论 + 来源清单：claim / value / source_tool / source_data），渲染回 Markdown 保持下游兼容；校验结果随状态日志持久化
+  1. **读取首次请求上下文**：校验数据直接取分析师分支会话中保留的首次请求原始返回（ToolMessage，自己检查自己的，**不发起任何新请求**——每个数据接口每次运行只被调用一次，重试轮同样复用；仅在上下文缺失的异常流程兜底复拉一次）；校验数据只进代码，不进 LLM 上下文
+  2. **代码校验**（接口全部返回 JSON，可确定性核实）：每条 claim 逐项判定——事实类：代码按 `evidence.source_tool + evidence.json_path` 从首次工具结果解析精确字段并与报告值比较；计算类：公式变量必须与 `evidence.alias` 对应，代码按路径读取真实输入后执行 `formula` 复算（0.5% 容差）。LLM 不复制可信输入值，也不做全 JSON 数值兜底扫描。web_search_tool 已退出校验集（自由文本检索结果无法代码级判定真伪）
+  3. **失败反馈闭环**：代码生成的失败原因写入 `verification_state`，通过 `RetryClear` 节点把分析师**送回去重新生成报告**（feedback 注入其 prompt，且重试轮**不绑定任何工具**——首次取数的上下文保留在会话中，重试不发起新请求），最多 `max_verify_rounds`（默认 2）轮；超限后报告标记为未通过并继续，不阻塞流水线
+- 所有分析师子图中**只有第一个节点（Analyze）调用 LLM**：FactChecker 纯代码、RetryClear 纯状态操作，重试只复用首次请求的上下文，不会引起上下文超长
+- 分析师输出升级为 `AnalystFactualReport`（claim / value / evidence[] / formula）：evidence 保存工具名、精确 JSON 路径、变量别名、单位和期间；校验结果额外保存代码解析出的 resolved_value 并随状态日志持久化
 - 配置：`verify_enabled`（默认 True）、`max_verify_rounds`（默认 2）
-- 覆盖测试：`tests/test_fact_checker.py`、`tests/test_web_search_tool.py`
+- 覆盖测试：`tests/test_fact_checker.py`
 
 **各子图职责**：
 

@@ -8,7 +8,7 @@ from .reflection import Reflector
 from .signal_processing import SignalProcessor
 from .ticker_guard import create_ticker_guard, is_valid_ticker, normalize_ticker
 from .fact_checker import (
-    CROSS_VERIFY_TOOLS,
+    VERIFY_TOOLS,
     VERIFY_ANALYSTS,
     create_fact_checker,
     make_verify_router,
@@ -36,7 +36,7 @@ __all__ = [
     "create_ticker_guard",
     "is_valid_ticker",
     "normalize_ticker",
-    "CROSS_VERIFY_TOOLS",
+    "VERIFY_TOOLS",
     "VERIFY_ANALYSTS",
     "create_fact_checker",
     "make_verify_router",

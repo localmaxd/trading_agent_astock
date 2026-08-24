@@ -8,3 +8,4 @@ class AnalystType(str, Enum):
     TECHNICAL = "technical"
     GAME_THEORY = "game_theory"
     NEWS_SENTIMENT = "news_sentiment"
+    MACRO = "macro"

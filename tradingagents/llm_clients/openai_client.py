@@ -231,6 +231,10 @@ class OpenAIClient(BaseLLMClient):
             if key in self.kwargs:
                 llm_kwargs[key] = self.kwargs[key]
 
+        # 流式输出：按 token 回调 on_llm_new_token，供 Web 实时展示模型输出。
+        # invoke 仍返回完整结果，结构化输出/工具调用不受影响。
+        llm_kwargs["streaming"] = True
+
         # Native OpenAI: use Responses API for consistent behavior across
         # all model families. Skip for custom endpoints (local/self-hosted).
         if self.provider == "openai" and not self.base_url:

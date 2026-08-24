@@ -5,6 +5,7 @@ from .analysts.fundamentals_analyst import create_fundamentals_analyst
 from .analysts.technical_analyst import create_technical_analyst
 from .analysts.game_theory_analyst import create_game_theory_analyst
 from .analysts.news_sentiment_analyst import create_news_sentiment_analyst
+from .analysts.macro_analyst import create_macro_analyst
 
 from .researchers.bear_researcher import create_bear_researcher
 from .researchers.bull_researcher import create_bull_researcher
@@ -30,6 +31,7 @@ __all__ = [
     "create_technical_analyst",
     "create_game_theory_analyst",
     "create_news_sentiment_analyst",
+    "create_macro_analyst",
     "create_neutral_debator",
     "create_aggressive_debator",
     "create_portfolio_manager",

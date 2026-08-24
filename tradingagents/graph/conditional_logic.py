@@ -9,6 +9,7 @@ _ANALYST_MESSAGE_CHANNELS = {
     "technical": "messages_technical",
     "game_theory": "messages_game_theory",
     "news_sentiment": "messages_news_sentiment",
+    "macro": "messages_macro",
 }
 
 
@@ -59,6 +60,14 @@ class ConditionalLogic:
         last_message = messages[-1]
         if last_message.tool_calls:
             return "tools_news_sentiment"
+        return "done"
+
+    def should_continue_macro(self, state: AgentState):
+        """Determine if macro/market environment analysis should continue."""
+        messages = _analyst_messages(state, "macro")
+        last_message = messages[-1]
+        if last_message.tool_calls:
+            return "tools_macro"
         return "done"
 
     def should_continue_debate(self, state: AgentState) -> str:
